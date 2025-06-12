@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\Schema;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -19,6 +21,20 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Force HTTPS for Vercel/production
+        if (config('app.env') === 'production') {
+            URL::forceScheme('https');
+        }
+
+        // Set default string length for older MySQL versions
+        Schema::defaultStringLength(191);
+
+        // Extend CSRF token lifetime for forms
+        config(['session.lifetime' => 120]);
+
+        // Trust proxy headers for Vercel
+        if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+            $_SERVER['HTTPS'] = 'on';
+        }
     }
 }
