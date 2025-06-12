@@ -114,8 +114,19 @@
                         <i class="fas fa-credit-card mr-2 text-blue-600"></i>Pilih Metode Pembayaran
                     </h2>
 
+                    <!-- Debug path -->
+                    <p>Dana path: {{ asset('payments/dana.png') }}</p>
+                    <p>BSI path: {{ asset('payments/bsi.png') }}</p>
+
+                    <!-- Gambar -->
+                    <img src="{{ asset('payments/dana.png') }}" alt="Dana" style="width: 100px;">
+                    <img src="{{ asset('payments/bsi.png') }}" alt="Bank BSI" style="width: 100px;">
+
+                    <!-- Test path absolut -->
+                    <img src="/payments/dana.png" alt="Dana" style="width: 100px;">
+                    <img src="/payments/bsi.png" alt="Bank BSI" style="width: 100px;">
+
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- Bank BSI -->
                         <!-- Bank BSI -->
                         <div class="border-2 border-gray-200 rounded-xl p-6 hover:border-blue-500 transition-colors">
                             <div class="text-center mb-4">
