@@ -58,3 +58,46 @@ Route::get('/storage/{path}', function ($path) {
 Route::fallback(function () {
     return redirect()->route('home');
 });
+
+
+// Tambahkan route debug di web.php (HAPUS SETELAH TEST)
+Route::get('/debug-files', function () {
+    $publicPath = public_path();
+    $paymentsPath = public_path('payments');
+
+    $result = [
+        'public_path' => $publicPath,
+        'public_exists' => is_dir($publicPath),
+        'payments_path' => $paymentsPath,
+        'payments_exists' => is_dir($paymentsPath),
+        'payment_files' => [],
+        'vercel_structure' => [],
+    ];
+
+    // List payment files
+    if (is_dir($paymentsPath)) {
+        $result['payment_files'] = array_diff(scandir($paymentsPath), ['.', '..']);
+    }
+
+    // Check Vercel structure
+    $basePath = base_path();
+    $result['base_path'] = $basePath;
+    $result['vercel_structure'] = [
+        'api_exists' => is_dir($basePath . '/api'),
+        'public_exists' => is_dir($basePath . '/public'),
+        'public_payments_exists' => is_dir($basePath . '/public/payments'),
+    ];
+
+    // Test specific files
+    $testFiles = ['dana.png', 'bca.png', 'mandiri.png', 'ovo.png'];
+    foreach ($testFiles as $file) {
+        $filePath = public_path("payments/{$file}");
+        $result['test_files'][$file] = [
+            'path' => $filePath,
+            'exists' => file_exists($filePath),
+            'size' => file_exists($filePath) ? filesize($filePath) : 0,
+        ];
+    }
+
+    return response()->json($result, 200, [], JSON_PRETTY_PRINT);
+});
