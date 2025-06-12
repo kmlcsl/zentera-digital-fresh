@@ -11,15 +11,25 @@
             "dest": "/api/index.php"
         },
         {
-            "src": "/payments/(.*)",
-            "dest": "/public/payments/$1",
+            "src": "/storage/(.*)",
+            "dest": "/api/index.php",
             "headers": {
-                "Cache-Control": "public, max-age=31536000"
+                "X-Forwarded-Proto": "https"
             }
         }
     ],
     "env": {
         "APP_ENV": "production",
-        "APP_DEBUG": "true"
+        "APP_DEBUG": "true",
+        "LOG_CHANNEL": "stderr",
+        "LOG_LEVEL": "error",
+        "VIEW_COMPILED_PATH": "/tmp",
+        "APP_SERVICES_CACHE": "/tmp/services.php",
+        "APP_PACKAGES_CACHE": "/tmp/packages.php",
+        "APP_CONFIG_CACHE": "/tmp/config.php",
+        "APP_ROUTES_CACHE": "/tmp/routes.php",
+        "APP_EVENTS_CACHE": "/tmp/events.php",
+        "CACHE_DRIVER": "array",
+        "SESSION_DRIVER": "cookie"
     }
 }
