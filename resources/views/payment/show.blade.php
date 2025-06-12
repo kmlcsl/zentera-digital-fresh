@@ -114,18 +114,6 @@
                         <i class="fas fa-credit-card mr-2 text-blue-600"></i>Pilih Metode Pembayaran
                     </h2>
 
-                    <!-- Debug path -->
-                    <p>Dana path: {{ asset('payments/dana.png') }}</p>
-                    <p>BSI path: {{ asset('payments/bsi.png') }}</p>
-
-                    <!-- Gambar -->
-                    <img src="{{ asset('payments/dana.png') }}" alt="Dana" style="width: 100px;">
-                    <img src="{{ asset('payments/bsi.png') }}" alt="Bank BSI" style="width: 100px;">
-
-                    <!-- Test path absolut -->
-                    <img src="/payments/dana.png" alt="Dana" style="width: 100px;">
-                    <img src="/payments/bsi.png" alt="Bank BSI" style="width: 100px;">
-
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <!-- Bank BSI -->
                         <div class="border-2 border-gray-200 rounded-xl p-6 hover:border-blue-500 transition-colors">
@@ -251,16 +239,15 @@
                                     class="flex items-center p-4 border border-gray-300 rounded-lg cursor-pointer hover:bg-blue-50">
                                     <input type="radio" name="payment_method" value="bsi" required class="mr-3">
                                     <div class="flex items-center">
-                                        <i class="fas fa-university text-blue-600 mr-2"></i>
-                                        <span class="font-medium">Bank BSI</span>
+                                        <img src="{{ asset('payments/icon-bsi.png') }}" alt="Bank BSI" class="h-6 mr-2">
                                     </div>
                                 </label>
                                 <label
                                     class="flex items-center p-4 border border-gray-300 rounded-lg cursor-pointer hover:bg-green-50">
                                     <input type="radio" name="payment_method" value="dana" required class="mr-3">
                                     <div class="flex items-center">
-                                        <i class="fas fa-mobile-alt text-green-600 mr-2"></i>
-                                        <span class="font-medium">DANA</span>
+                                        <img src="{{ asset('payments/icon-dana.png') }}" alt="DANA"
+                                            class="h-6 mr-2">
                                     </div>
                                 </label>
                             </div>
