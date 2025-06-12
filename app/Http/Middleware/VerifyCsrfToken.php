@@ -12,21 +12,47 @@ class VerifyCsrfToken extends Middleware
      * @var array<int, string>
      */
     protected $except = [
-        // Webhook routes
+        // Webhook routes - semua variasi
         'webhook/*',
-        '/webhook/whatsapp',
+        '/webhook/*',
         'webhook/whatsapp',
-        'api/webhook/*',
-        'https://www.zenteradigital.my.id/api/webhook/whatsapp',
-        'https://zenteradigital.my.id/api/webhook/whatsapp',
+        '/webhook/whatsapp',
+        'webhook/whatsapp/*',
+        '/webhook/whatsapp/*',
 
         // API routes
         'api/*',
+        '/api/*',
 
-        // Any other external callbacks
+        // External callbacks
         'callback/*',
         'hook/*',
+
+        // Testing routes
+        'test-*',
     ];
+
+    /**
+     * Determine if the request has a URI that should pass through CSRF verification.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return bool
+     */
+    protected function inExceptArray($request)
+    {
+        // Custom logic untuk webhook
+        if ($request->is('webhook/*') || $request->is('*/webhook/*')) {
+            return true;
+        }
+
+        // Check if User-Agent contains 'fonnte' (FONNTE webhook)
+        $userAgent = $request->header('User-Agent', '');
+        if (stripos($userAgent, 'fonnte') !== false) {
+            return true;
+        }
+
+        return parent::inExceptArray($request);
+    }
 
     /**
      * Handle an incoming request.
