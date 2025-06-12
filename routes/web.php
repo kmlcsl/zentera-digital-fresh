@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Http\Request;
 use App\Classes\ListRoutes;
@@ -106,31 +108,82 @@ foreach ($adminRoutes as $key_list => $value_list) {
     }
 }
 
-// Additional Routes
-// Route::get('/login', function () {
-//     return redirect()->route('admin.login');
-// })->name('login');
-
-// Route::get('/admin', function () {
-//     if (Session::get('admin_logged_in') && Session::get('admin_id')) {
-//         return redirect()->route('admin.dashboard');
-//     }
-//     return redirect()->route('admin.login');
-// });
-
-
 // Admin routes tanpa middleware
 Route::get('/admin/login', function () {
     return view('admin.auth.login');
 })->name('admin.login');
 
 Route::post('/admin/login', function (Request $request) {
-    // Login logic
+    $request->validate([
+        'email' => 'required|email',
+        'password' => 'required|string',
+    ]);
+
+    try {
+        $admin = \App\Models\AdminUser::where('email', $request->email)
+            ->where('is_active', true)
+            ->first();
+
+        if ($admin && Hash::check($request->password, $admin->password)) {
+            Session::put('admin_logged_in', true);
+            Session::put('admin_id', $admin->id);
+            Session::put('admin_name', $admin->name);
+            Session::put('admin_email', $admin->email);
+            Session::put('admin_role', $admin->role);
+
+            // Update last login jika method ada
+            if (method_exists($admin, 'updateLastLogin')) {
+                $admin->updateLastLogin($request->ip());
+            }
+
+            return redirect('/admin/dashboard')->with('success', 'Login berhasil!');
+        }
+
+        return back()->withErrors(['login' => 'Email atau password salah!'])
+            ->withInput($request->only('email'));
+    } catch (\Exception $e) {
+        Log::error('Login Error: ' . $e->getMessage());
+        return back()->withErrors(['login' => 'Terjadi kesalahan sistem: ' . $e->getMessage()]);
+    }
 })->name('admin.login.submit');
 
 Route::get('/admin/dashboard', function () {
-    // Dashboard logic
+    if (!Session::get('admin_logged_in')) {
+        return redirect('/admin/login')->with('error', 'Please login first');
+    }
+
+    // Simple dashboard view
+    return view('admin.dashboard', [
+        'adminName' => Session::get('admin_name', 'Admin'),
+        'stats' => [
+            'total_orders' => 0,
+            'pending_orders' => 0,
+            'completed_orders' => 0,
+            'monthly_revenue' => 0,
+            'weekly_orders' => 0,
+            'active_services' => 0
+        ],
+        'recent_orders' => collect(),
+        'monthly_chart_data' => [
+            'labels' => [],
+            'revenue' => [],
+            'orders' => []
+        ]
+    ]);
 })->name('admin.dashboard');
+
+Route::post('/admin/logout', function () {
+    Session::forget(['admin_logged_in', 'admin_id', 'admin_name', 'admin_email', 'admin_role']);
+    return redirect('/admin/login')->with('success', 'Logout berhasil!');
+})->name('admin.logout');
+
+Route::get('/admin', function () {
+    if (Session::get('admin_logged_in')) {
+        return redirect('/admin/dashboard');
+    }
+    return redirect('/admin/login');
+});
+
 
 // Fallback route for 404
 Route::fallback(function () {
