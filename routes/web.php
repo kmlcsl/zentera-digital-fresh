@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Session;
 use App\Classes\ListRoutes;
 
 /*
@@ -110,7 +111,7 @@ Route::get('/login', function () {
 })->name('login');
 
 Route::get('/admin', function () {
-    if (\Session::get('admin_logged_in') && \Session::get('admin_id')) {
+    if (Session::get('admin_logged_in') && Session::get('admin_id')) {
         return redirect()->route('admin.dashboard');
     }
     return redirect()->route('admin.login');

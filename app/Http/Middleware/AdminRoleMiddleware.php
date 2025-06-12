@@ -13,13 +13,13 @@ class AdminRoleMiddleware
      * Handle an incoming request.
      *
      * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
-     * @param  string  $role
+     * @param  string|null  $role
      */
-    public function handle(Request $request, Closure $next, string $role = null): Response
+    public function handle(Request $request, Closure $next, ?string $role = null): Response
     {
         // Cek apakah admin sudah login via session
         if (!Session::get('admin_logged_in') || !Session::get('admin_id')) {
-            return redirect()->route('admin.login')->with('error', 'Please login to access admin panel.');
+            return redirect('/admin/login')->with('error', 'Please login to access admin panel.');
         }
 
         // Jika ada parameter role, cek role admin

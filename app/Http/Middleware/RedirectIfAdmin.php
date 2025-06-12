@@ -9,16 +9,12 @@ use Symfony\Component\HttpFoundation\Response;
 
 class RedirectIfAdmin
 {
-    /**
-     * Handle an incoming request.
-     *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
-     */
     public function handle(Request $request, Closure $next): Response
     {
         // Jika admin sudah login via session, redirect ke dashboard
         if (Session::get('admin_logged_in') && Session::get('admin_id')) {
-            return redirect()->route('admin.dashboard');
+            // PERBAIKAN: Gunakan redirect langsung tanpa route()
+            return redirect('/admin/dashboard');
         }
 
         // Jika belum login, lanjutkan ke halaman login
