@@ -422,7 +422,7 @@ function handleGeneralMessage($phone, $message)
 }
 
 /**
- * Send WhatsApp message using FONNTE API (HTTPS Socket untuk Vercel)
+ * Send WhatsApp message using FONNTE API (Simplified untuk Vercel)
  */
 function sendWhatsAppMessage($phone, $message)
 {
@@ -440,82 +440,18 @@ function sendWhatsAppMessage($phone, $message)
 
     error_log("FONNTE SEND - Phone: {$phone} -> {$cleanPhone}");
 
-    // Use HTTPS socket with SSL context
-    $postData = 'target=' . urlencode($cleanPhone) . '&message=' . urlencode($message);
-    $postLength = strlen($postData);
-
-    $request = "POST /send HTTP/1.1\r\n";
-    $request .= "Host: api.fonnte.com\r\n";
-    $request .= "Authorization: {$token}\r\n";
-    $request .= "Content-Type: application/x-www-form-urlencoded\r\n";
-    $request .= "Content-Length: {$postLength}\r\n";
-    $request .= "Connection: close\r\n\r\n";
-    $request .= $postData;
-
-    error_log("FONNTE SEND - HTTPS request");
-
-    // Create SSL context
-    $context = stream_context_create([
-        'ssl' => [
-            'verify_peer' => false,
-            'verify_peer_name' => false,
-            'allow_self_signed' => true
-        ]
-    ]);
-
-    // Open HTTPS socket connection
-    $socket = @stream_socket_client('ssl://api.fonnte.com:443', $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $context);
-
-    if (!$socket) {
-        error_log("FONNTE ERROR: HTTPS Socket connection failed - {$errno}: {$errstr}");
-
-        // Fallback: Try file_get_contents with better error handling
-        return fallbackHttpRequest($cleanPhone, $message, $token);
-    }
-
-    // Send request
-    fwrite($socket, $request);
-
-    // Get response
-    $response = '';
-    while (!feof($socket)) {
-        $response .= fgets($socket, 1024);
-    }
-    fclose($socket);
-
-    error_log("FONNTE SEND - HTTPS response received");
-
-    // Parse response
-    $parts = explode("\r\n\r\n", $response, 2);
-    if (count($parts) < 2) {
-        error_log("FONNTE ERROR: Invalid HTTPS response format");
-        return false;
-    }
-
-    $body = $parts[1];
-    $result = json_decode($body, true);
-
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        error_log("FONNTE ERROR: JSON decode failed - " . json_last_error_msg());
-        return false;
-    }
-
-    error_log("FONNTE HTTPS result: " . json_encode($result));
-
-    return isset($result['status']) && $result['status'] === true ? $result : false;
-}
-
-/**
- * Fallback HTTP request method
- */
-function fallbackHttpRequest($phone, $message, $token)
-{
-    error_log("FONNTE FALLBACK - Using file_get_contents");
-
-    $postData = http_build_query([
-        'target' => $phone,
+    // Prepare POST data exactly like successful curl
+    $postFields = [
+        'target' => $cleanPhone,
         'message' => $message
-    ]);
+    ];
+
+    error_log("FONNTE SEND - Data: " . json_encode($postFields));
+
+    // Try multiple methods - start with the most compatible
+
+    // Method 1: Standard file_get_contents with proper SSL context
+    $postData = http_build_query($postFields);
 
     $context = stream_context_create([
         'http' => [
@@ -523,28 +459,76 @@ function fallbackHttpRequest($phone, $message, $token)
             'header' => "Content-Type: application/x-www-form-urlencoded\r\n" .
                 "Authorization: {$token}\r\n",
             'content' => $postData,
-            'timeout' => 30,
+            'timeout' => 45,
             'ignore_errors' => true
         ],
+        'ssl' => [
+            'verify_peer' => false,
+            'verify_peer_name' => false,
+            'allow_self_signed' => true,
+            'ciphers' => 'DEFAULT:!DH'
+        ]
+    ]);
+
+    error_log("FONNTE SEND - Attempting file_get_contents...");
+
+    $response = @file_get_contents('https://api.fonnte.com/send', false, $context);
+
+    if ($response !== false && !empty($response)) {
+        error_log("FONNTE SUCCESS - file_get_contents worked: " . $response);
+
+        $result = json_decode($response, true);
+        if ($result && isset($result['status']) && $result['status'] === true) {
+            return $result;
+        }
+    }
+
+    // Method 2: Using fsockopen with manual HTTP request
+    error_log("FONNTE FALLBACK - Trying fsockopen...");
+
+    $host = 'api.fonnte.com';
+    $port = 443;
+    $timeout = 30;
+
+    $context = stream_context_create([
         'ssl' => [
             'verify_peer' => false,
             'verify_peer_name' => false
         ]
     ]);
 
-    $response = @file_get_contents('https://api.fonnte.com/send', false, $context);
+    $socket = @stream_socket_client("ssl://{$host}:{$port}", $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT, $context);
 
-    if ($response === false) {
-        error_log("FONNTE FALLBACK: file_get_contents failed");
-        $error = error_get_last();
-        if ($error) {
-            error_log("FONNTE FALLBACK ERROR: " . $error['message']);
+    if ($socket) {
+        $request = "POST /send HTTP/1.1\r\n";
+        $request .= "Host: {$host}\r\n";
+        $request .= "Authorization: {$token}\r\n";
+        $request .= "Content-Type: application/x-www-form-urlencoded\r\n";
+        $request .= "Content-Length: " . strlen($postData) . "\r\n";
+        $request .= "Connection: close\r\n\r\n";
+        $request .= $postData;
+
+        fwrite($socket, $request);
+
+        $response = '';
+        while (!feof($socket)) {
+            $response .= fread($socket, 8192);
         }
-        return false;
+        fclose($socket);
+
+        if (preg_match('/\r\n\r\n(.+)$/s', $response, $matches)) {
+            $body = $matches[1];
+            error_log("FONNTE SOCKET SUCCESS: " . $body);
+
+            $result = json_decode($body, true);
+            if ($result && isset($result['status']) && $result['status'] === true) {
+                return $result;
+            }
+        }
     }
 
-    $result = json_decode($response, true);
-    error_log("FONNTE FALLBACK result: " . json_encode($result));
+    error_log("FONNTE ERROR - All methods failed");
+    error_log("FONNTE ERROR - Last error: " . json_encode(error_get_last()));
 
-    return isset($result['status']) && $result['status'] === true ? $result : false;
+    return false;
 }
