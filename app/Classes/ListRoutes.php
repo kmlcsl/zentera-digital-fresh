@@ -122,7 +122,7 @@ class ListRoutes
                         'url' => '/admin/login',
                         'controller' => 'App\Http\Controllers\Admin\AdminLoginController@showLoginForm',
                         'name' => 'admin.login',
-                        'middleware' => 'admin.guest',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'auth',
@@ -130,7 +130,7 @@ class ListRoutes
                         'url' => '/admin/login',
                         'controller' => 'App\Http\Controllers\Admin\AdminLoginController@login',
                         'name' => 'admin.login.submit',
-                        'middleware' => 'admin.guest',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'auth',
@@ -138,7 +138,7 @@ class ListRoutes
                         'url' => '/admin/logout',
                         'controller' => 'App\Http\Controllers\Admin\AdminLoginController@logout',
                         'name' => 'admin.logout',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ]
                 ]
             ],
@@ -151,7 +151,7 @@ class ListRoutes
                         'url' => '/admin/dashboard',
                         'controller' => 'App\Http\Controllers\Admin\DashboardController@index',
                         'name' => 'admin.dashboard',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'dashboard',
@@ -159,7 +159,7 @@ class ListRoutes
                         'url' => '/admin/dashboard/stats',
                         'controller' => 'App\Http\Controllers\Admin\DashboardController@getStats',
                         'name' => 'admin.dashboard.stats',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'dashboard',
@@ -167,7 +167,7 @@ class ListRoutes
                         'url' => '/admin/dashboard/chart',
                         'controller' => 'App\Http\Controllers\Admin\DashboardController@getChartData',
                         'name' => 'admin.dashboard.chart',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ]
                 ]
             ],
@@ -180,7 +180,7 @@ class ListRoutes
                         'url' => '/admin/products',
                         'controller' => 'App\Http\Controllers\Admin\ProductController@index',
                         'name' => 'admin.products.index',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'products',
@@ -188,7 +188,7 @@ class ListRoutes
                         'url' => '/admin/products/create',
                         'controller' => 'App\Http\Controllers\Admin\ProductController@create',
                         'name' => 'admin.products.create',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'products',
@@ -196,7 +196,7 @@ class ListRoutes
                         'url' => '/admin/products',
                         'controller' => 'App\Http\Controllers\Admin\ProductController@store',
                         'name' => 'admin.products.store',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'products',
@@ -204,7 +204,7 @@ class ListRoutes
                         'url' => '/admin/products/{id}',
                         'controller' => 'App\Http\Controllers\Admin\ProductController@show',
                         'name' => 'admin.products.show',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'products',
@@ -212,7 +212,7 @@ class ListRoutes
                         'url' => '/admin/products/{id}/edit',
                         'controller' => 'App\Http\Controllers\Admin\ProductController@edit',
                         'name' => 'admin.products.edit',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'products',
@@ -220,7 +220,7 @@ class ListRoutes
                         'url' => '/admin/products/{id}',
                         'controller' => 'App\Http\Controllers\Admin\ProductController@update',
                         'name' => 'admin.products.update',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'products',
@@ -228,7 +228,7 @@ class ListRoutes
                         'url' => '/admin/products/{id}',
                         'controller' => 'App\Http\Controllers\Admin\ProductController@destroy',
                         'name' => 'admin.products.destroy',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'products',
@@ -236,7 +236,7 @@ class ListRoutes
                         'url' => '/admin/products/toggle-visibility',
                         'controller' => 'App\Http\Controllers\Admin\ProductController@toggleVisibility',
                         'name' => 'admin.products.toggle.visibility',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ]
                 ]
             ],
@@ -249,7 +249,7 @@ class ListRoutes
                         'url' => '/admin/orders',
                         'controller' => 'App\Http\Controllers\Admin\OrderController@index',
                         'name' => 'admin.orders.index',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'orders',
@@ -257,7 +257,7 @@ class ListRoutes
                         'url' => '/admin/orders/filter',
                         'controller' => 'App\Http\Controllers\Admin\OrderController@filter',
                         'name' => 'admin.orders.filter',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'orders',
@@ -265,7 +265,7 @@ class ListRoutes
                         'url' => '/admin/orders/create',
                         'controller' => 'App\Http\Controllers\Admin\OrderController@create',
                         'name' => 'admin.orders.create',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'orders',
@@ -273,7 +273,7 @@ class ListRoutes
                         'url' => '/admin/orders',
                         'controller' => 'App\Http\Controllers\Admin\OrderController@store',
                         'name' => 'admin.orders.store',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'orders',
@@ -281,7 +281,7 @@ class ListRoutes
                         'url' => '/admin/orders/{id}',
                         'controller' => 'App\Http\Controllers\Admin\OrderController@show',
                         'name' => 'admin.orders.show',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'orders',
@@ -289,7 +289,7 @@ class ListRoutes
                         'url' => '/admin/orders/{id}/edit',
                         'controller' => 'App\Http\Controllers\Admin\OrderController@edit',
                         'name' => 'admin.orders.edit',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'orders',
@@ -297,7 +297,7 @@ class ListRoutes
                         'url' => '/admin/orders/{id}',
                         'controller' => 'App\Http\Controllers\Admin\OrderController@update',
                         'name' => 'admin.orders.update',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'orders',
@@ -305,7 +305,7 @@ class ListRoutes
                         'url' => '/admin/orders/{id}',
                         'controller' => 'App\Http\Controllers\Admin\OrderController@destroy',
                         'name' => 'admin.orders.destroy',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ]
                 ]
             ],
@@ -318,7 +318,7 @@ class ListRoutes
                         'url' => '/admin/settings',
                         'controller' => 'App\Http\Controllers\Admin\SettingController@index',
                         'name' => 'admin.settings.index',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'settings',
@@ -326,7 +326,7 @@ class ListRoutes
                         'url' => '/admin/settings/business',
                         'controller' => 'App\Http\Controllers\Admin\SettingController@updateBusiness',
                         'name' => 'admin.settings.business',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'settings',
@@ -334,7 +334,7 @@ class ListRoutes
                         'url' => '/admin/settings/profile',
                         'controller' => 'App\Http\Controllers\Admin\SettingController@updateProfile',
                         'name' => 'admin.settings.profile.update',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ],
                     [
                         'type' => 'settings',
@@ -342,7 +342,7 @@ class ListRoutes
                         'url' => '/admin/settings/password',
                         'controller' => 'App\Http\Controllers\Admin\SettingController@updatePassword',
                         'name' => 'admin.settings.password',
-                        'middleware' => 'admin',
+                        'middleware' => '',
                     ]
                 ]
             ]
