@@ -13,13 +13,9 @@ class WhatsAppWebhookController extends Controller
 
     public function __construct()
     {
-        // Use helper method to get service
         $this->whatsappService = $this->getWhatsAppService();
     }
 
-    /**
-     * Get WhatsApp service instance
-     */
     protected function getWhatsAppService()
     {
         try {
@@ -29,14 +25,9 @@ class WhatsAppWebhookController extends Controller
         }
     }
 
-    /**
-     * Handle incoming WhatsApp messages from FONNTE webhook
-     * Support both GET and POST methods
-     */
     public function handleIncoming(Request $request)
     {
         try {
-            // Handle GET request (for webhook verification)
             if ($request->isMethod('GET')) {
                 return response()->json([
                     'status' => 'webhook_active',
@@ -46,162 +37,216 @@ class WhatsAppWebhookController extends Controller
                 ]);
             }
 
-            // Log incoming webhook data for debugging
+            // Enhanced logging for debugging
             Log::info('WhatsApp Webhook Received:', [
                 'method' => $request->method(),
                 'data' => $request->all(),
-                'raw_input' => $request->getContent()
+                'raw_input' => $request->getContent(),
+                'headers' => $request->headers->all()
             ]);
 
             $data = $request->all();
 
-            // Handle different FONNTE webhook formats
+            // Handle different FONNTE webhook formats with better validation
             $message = null;
             $sender = null;
 
-            // Format 1: Standard format
-            if (isset($data['message']) && isset($data['sender'])) {
-                $message = $data['message'];
-                $sender = $data['sender'];
-            }
-            // Format 2: FONNTE format with 'pesan' and 'pengirim'
-            elseif (isset($data['pesan']) && isset($data['pengirim'])) {
+            // Try multiple formats
+            if (isset($data['pesan']) && isset($data['pengirim'])) {
                 $message = $data['pesan'];
                 $sender = $data['pengirim'];
-            }
-            // Format 3: Alternative format
-            elseif (isset($data['text']) && isset($data['sender'])) {
+                Log::info('Using FONNTE format (pesan/pengirim)');
+            } elseif (isset($data['message']) && isset($data['sender'])) {
+                $message = $data['message'];
+                $sender = $data['sender'];
+                Log::info('Using standard format (message/sender)');
+            } elseif (isset($data['text']) && isset($data['sender'])) {
                 $message = $data['text'];
                 $sender = $data['sender'];
+                Log::info('Using alternative format (text/sender)');
             }
 
             // Validate webhook data
             if (!$message || !$sender) {
-                Log::warning('Invalid webhook data - no message or sender found', $data);
+                Log::warning('Invalid webhook data - no message or sender found', [
+                    'available_keys' => array_keys($data),
+                    'data' => $data
+                ]);
                 return response()->json(['status' => 'invalid_data'], 400);
             }
 
-            // Clean phone number - remove @s.whatsapp.net if present
-            $phone = str_replace('@s.whatsapp.net', '', $sender);
-            $phone = preg_replace('/[^0-9]/', '', $phone); // Keep only numbers
+            // Clean phone number
+            $phone = str_replace(['@s.whatsapp.net', '@c.us'], '', $sender);
+            $phone = preg_replace('/[^0-9]/', '', $phone);
+
+            // Enhanced logging for phone processing
+            Log::info('Phone number processing:', [
+                'original_sender' => $sender,
+                'cleaned_phone' => $phone
+            ]);
 
             // Skip if message is from our own bot or if it's a group
             if ((isset($data['fromMe']) && $data['fromMe']) ||
                 (isset($data['isgroup']) && $data['isgroup'])
             ) {
+                Log::info('Skipping message: fromMe or isGroup');
                 return response()->json(['status' => 'ignored_message']);
             }
 
             // Process the message
             $result = $this->processIncomingMessage($phone, $message);
 
-            return response()->json(['status' => 'success'])
+            return response()->json(['status' => 'success', 'result' => $result])
                 ->header('Content-Type', 'application/json')
                 ->header('Access-Control-Allow-Origin', '*')
                 ->header('Cache-Control', 'no-cache');
         } catch (\Exception $e) {
-            Log::error('WhatsApp Webhook Error: ' . $e->getMessage());
-            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500)
-                ->header('Content-Type', 'application/json');
+            Log::error('WhatsApp Webhook Error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
+            ]);
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * Process incoming message and send appropriate auto-reply
-     */
     protected function processIncomingMessage($phone, $message)
     {
-        Log::info('Processing message from: ' . $phone, ['message' => substr($message, 0, 100) . '...']);
+        Log::info('Processing message from: ' . $phone, [
+            'message_length' => strlen($message),
+            'message_preview' => substr($message, 0, 200)
+        ]);
 
-        // Check if message contains order number
+        // Enhanced order number extraction
         $orderNumber = $this->extractOrderNumber($message);
 
+        Log::info('Order extraction result:', [
+            'extracted_order' => $orderNumber,
+            'phone' => $phone
+        ]);
+
         if ($orderNumber) {
-            $this->handleOrderRelatedMessage($phone, $orderNumber, $message);
+            return $this->handleOrderRelatedMessage($phone, $orderNumber, $message);
         } else {
-            $this->handleGeneralMessage($phone, $message);
+            return $this->handleGeneralMessage($phone, $message);
         }
     }
 
-    /**
-     * Extract order number from message
-     */
     protected function extractOrderNumber($message)
     {
-        // Look for pattern: DOC followed by date and number
-        if (preg_match('/DOC\d{8}\d{3}/', $message, $matches)) {
-            return $matches[0];
+        // Enhanced regex patterns for order number extraction
+        $patterns = [
+            '/Order:\s*(DOC\d{8}\d{3})/i',     // "Order: DOC20250612004"
+            '/(DOC\d{8}\d{3})/',               // Direct match "DOC20250612004"
+            '/🔢\s*Order:\s*(DOC\d{8}\d{3})/i', // With emoji
+            '/No\.?\s*Order:\s*(DOC\d{8}\d{3})/i', // "No. Order:"
+            '/Order\s*ID:\s*(DOC\d{8}\d{3})/i', // "Order ID:"
+            '/Order\s*Number:\s*(DOC\d{8}\d{3})/i' // "Order Number:"
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $message, $matches)) {
+                Log::info('Order number found with pattern: ' . $pattern, [
+                    'match' => $matches[1]
+                ]);
+                return $matches[1];
+            }
         }
 
-        // Look for "Order:" pattern
-        if (preg_match('/Order:\s*(DOC\d{8}\d{3})/i', $message, $matches)) {
-            return $matches[1];
-        }
-
+        Log::info('No order number found in message');
         return null;
     }
 
-    /**
-     * Handle message with order number
-     */
     protected function handleOrderRelatedMessage($phone, $orderNumber, $message)
     {
-        // Find the order
+        Log::info('Handling order-related message:', [
+            'phone' => $phone,
+            'order_number' => $orderNumber
+        ]);
+
+        // Find the order with enhanced logging
         $order = DocumentOrder::where('order_number', $orderNumber)->first();
 
         if (!$order) {
+            Log::warning('Order not found in database:', [
+                'order_number' => $orderNumber,
+                'phone' => $phone
+            ]);
+
+            // Check if there are any orders at all
+            $totalOrders = DocumentOrder::count();
+            $recentOrders = DocumentOrder::latest()->take(5)->pluck('order_number');
+
+            Log::info('Database check:', [
+                'total_orders' => $totalOrders,
+                'recent_orders' => $recentOrders->toArray()
+            ]);
+
             $this->sendAutoReply(
                 $phone,
-                "Maaf, nomor order {$orderNumber} tidak ditemukan. " .
-                    "Mohon periksa kembali nomor order Anda atau hubungi customer service kami."
+                "❌ Maaf, nomor order {$orderNumber} tidak ditemukan dalam sistem kami.\n\n" .
+                    "Mohon periksa kembali nomor order Anda atau hubungi customer service kami.\n\n" .
+                    "Format order: DOC + tanggal + nomor urut\n" .
+                    "Contoh: DOC20250612001\n\n" .
+                    "Terima kasih! 🙏"
             );
-            return;
+            return false;
         }
 
-        // Check if customer phone matches (flexible matching)
-        $customerPhone = preg_replace('/[^0-9]/', '', $order->customer_phone);
+        Log::info('Order found:', [
+            'order_id' => $order->id,
+            'order_number' => $order->order_number,
+            'customer_phone' => $order->customer_phone,
+            'payment_status' => $order->payment_status
+        ]);
+
+        // Enhanced phone matching with better logging
+        $customerPhone = preg_replace('/[^0-9]/', '', $order->customer_phone ?? '');
         $senderPhone = preg_replace('/[^0-9]/', '', $phone);
 
-        if ($customerPhone !== $senderPhone) {
-            Log::warning('Phone mismatch for order', [
-                'order_phone' => $customerPhone,
-                'sender_phone' => $senderPhone,
-                'order_number' => $orderNumber
-            ]);
-            // Continue processing anyway - might be different device
-        }
+        Log::info('Phone comparison:', [
+            'customer_phone_raw' => $order->customer_phone,
+            'customer_phone_clean' => $customerPhone,
+            'sender_phone_clean' => $senderPhone,
+            'match' => $customerPhone === $senderPhone
+        ]);
 
         // Detect message type and respond accordingly
         if ($this->isPaymentConfirmation($message)) {
-            $this->handlePaymentConfirmation($phone, $order, $message);
+            Log::info('Detected as payment confirmation');
+            return $this->handlePaymentConfirmation($phone, $order, $message);
         } elseif ($this->isStatusInquiry($message)) {
-            $this->handleStatusInquiry($phone, $order);
+            Log::info('Detected as status inquiry');
+            return $this->handleStatusInquiry($phone, $order);
         } else {
-            $this->handleGeneralOrderMessage($phone, $order, $message);
+            Log::info('Detected as general order message');
+            return $this->handleGeneralOrderMessage($phone, $order, $message);
         }
     }
 
-    /**
-     * Check if message is payment confirmation
-     */
     protected function isPaymentConfirmation($message)
     {
         $paymentKeywords = [
             'pembayaran berhasil',
+            'payment berhasil',
             'sudah bayar',
             'transfer berhasil',
             'bukti transfer',
             'sudah transfer',
-            'payment berhasil',
             'sudah upload bukti',
             'telah melakukan pembayaran',
-            'mohon segera diproses'
+            'mohon segera diproses',
+            'sudah diupload',
+            'payment success',
+            'bayar berhasil',
+            '✅ saya telah melakukan pembayaran'
         ];
 
         $messageLower = strtolower($message);
 
         foreach ($paymentKeywords as $keyword) {
             if (strpos($messageLower, $keyword) !== false) {
+                Log::info('Payment confirmation keyword found: ' . $keyword);
                 return true;
             }
         }
@@ -209,9 +254,6 @@ class WhatsAppWebhookController extends Controller
         return false;
     }
 
-    /**
-     * Check if message is status inquiry
-     */
     protected function isStatusInquiry($message)
     {
         $statusKeywords = [
@@ -221,7 +263,10 @@ class WhatsAppWebhookController extends Controller
             'kapan selesai',
             'update order',
             'progress pengerjaan',
-            'bagaimana kabar order'
+            'bagaimana kabar order',
+            'sudah selesai',
+            'kapan jadi',
+            'update status'
         ];
 
         $messageLower = strtolower($message);
@@ -235,43 +280,46 @@ class WhatsAppWebhookController extends Controller
         return false;
     }
 
-    /**
-     * Handle payment confirmation message
-     */
     protected function handlePaymentConfirmation($phone, $order, $message)
     {
+        Log::info('Processing payment confirmation:', [
+            'order_number' => $order->order_number,
+            'current_status' => $order->payment_status
+        ]);
+
         // Update order status if still pending
         if ($order->payment_status === 'pending') {
-            $order->update([
+            $updated = $order->update([
                 'payment_status' => 'paid',
                 'paid_at' => now()
+            ]);
+
+            Log::info('Order status updated:', [
+                'order_number' => $order->order_number,
+                'update_success' => $updated,
+                'new_status' => 'paid'
             ]);
         }
 
         // Send confirmation auto-reply
         $replyMessage = $this->getPaymentConfirmationReply($order);
-        $this->sendAutoReply($phone, $replyMessage);
+        $result = $this->sendAutoReply($phone, $replyMessage);
 
-        // Log the interaction
-        Log::info('Payment confirmation handled', [
+        Log::info('Payment confirmation handled:', [
             'order_number' => $order->order_number,
             'customer_phone' => $phone,
-            'updated_status' => 'paid'
+            'reply_sent' => $result
         ]);
+
+        return $result;
     }
 
-    /**
-     * Handle status inquiry
-     */
     protected function handleStatusInquiry($phone, $order)
     {
         $replyMessage = $this->getStatusInquiryReply($order);
-        $this->sendAutoReply($phone, $replyMessage);
+        return $this->sendAutoReply($phone, $replyMessage);
     }
 
-    /**
-     * Handle general order-related message
-     */
     protected function handleGeneralOrderMessage($phone, $order, $message)
     {
         $replyMessage = "Terima kasih atas pesan Anda terkait order #{$order->order_number}.\n\n" .
@@ -280,23 +328,19 @@ class WhatsAppWebhookController extends Controller
             "Jika ada pertanyaan lebih lanjut, silakan hubungi customer service kami.\n\n" .
             "Terima kasih! 🙏";
 
-        $this->sendAutoReply($phone, $replyMessage);
+        return $this->sendAutoReply($phone, $replyMessage);
     }
 
-    /**
-     * Handle general message without order number
-     */
     protected function handleGeneralMessage($phone, $message)
     {
-        // Check for general keywords
         $messageLower = strtolower($message);
 
         if (
             strpos($messageLower, 'halo') !== false ||
             strpos($messageLower, 'hello') !== false ||
-            strpos($messageLower, 'hai') !== false
+            strpos($messageLower, 'hai') !== false ||
+            strpos($messageLower, 'hi') !== false
         ) {
-
             $replyMessage = "Halo! Selamat datang di Zentera Digital 👋\n\n" .
                 "Kami adalah layanan profesional untuk:\n" .
                 "🔧 Perbaikan Dokumen\n" .
@@ -313,51 +357,46 @@ class WhatsAppWebhookController extends Controller
                 "Zentera Digital - Solusi Dokumen Terpercaya ✨";
         }
 
-        $this->sendAutoReply($phone, $replyMessage);
+        return $this->sendAutoReply($phone, $replyMessage);
     }
 
-    /**
-     * Get payment confirmation reply message
-     */
     protected function getPaymentConfirmationReply($order)
     {
         $serviceMessages = [
-            'plagiarism' => "Baik, mohon ditunggu yaa dalam proses pengecekkan\n\n",
-            'repair' => "Baik, dokumen Anda akan segera kami perbaiki\n\n",
-            'format' => "Baik, kami akan segera memformat dokumen Anda\n\n"
+            'plagiarism' => "Baik, mohon ditunggu yaa dalam proses pengecekan 🔍\n\n",
+            'repair' => "Baik, dokumen Anda akan segera kami perbaiki 🔧\n\n",
+            'format' => "Baik, kami akan segera memformat dokumen Anda 📝\n\n"
         ];
 
-        $serviceMessage = $serviceMessages[$order->service_type] ?? "Baik, pesanan Anda akan segera kami proses\n\n";
+        $serviceMessage = $serviceMessages[$order->service_type] ?? "Baik, pesanan Anda akan segera kami proses 🚀\n\n";
 
         return $serviceMessage .
             "✅ **PEMBAYARAN DITERIMA**\n\n" .
             "📋 Detail Order:\n" .
-            "No. Order: #{$order->order_number}\n" .
-            "Layanan: {$order->service_name}\n" .
-            "Status: Sedang diproses\n\n" .
+            "🔢 No. Order: #{$order->order_number}\n" .
+            "🔧 Layanan: {$order->service_name}\n" .
+            "📊 Status: Sedang diproses\n\n" .
             "⏰ Estimasi: 1-2 hari kerja\n\n" .
             "Kami akan mengirimkan hasilnya via WhatsApp setelah selesai.\n\n" .
-            "Terima kasih atas kepercayaan Anda! 🙏";
+            "Terima kasih atas kepercayaan Anda! 🙏\n\n" .
+            "Zentera Digital - Solusi Dokumen Terpercaya ✨";
     }
 
-    /**
-     * Get status inquiry reply message
-     */
     protected function getStatusInquiryReply($order)
     {
         $statusTexts = [
-            'pending' => 'Menunggu pembayaran',
-            'paid' => 'Sedang diproses',
-            'completed' => 'Selesai'
+            'pending' => 'Menunggu pembayaran 💰',
+            'paid' => 'Sedang diproses ⏳',
+            'completed' => 'Selesai ✅'
         ];
 
         $statusText = $statusTexts[$order->payment_status] ?? 'Unknown';
 
         return "📊 **STATUS ORDER**\n\n" .
-            "No. Order: #{$order->order_number}\n" .
-            "Layanan: {$order->service_name}\n" .
-            "Status: {$statusText}\n" .
-            "Tanggal Order: " . $order->created_at->format('d/m/Y H:i') . "\n\n" .
+            "🔢 No. Order: #{$order->order_number}\n" .
+            "🔧 Layanan: {$order->service_name}\n" .
+            "📊 Status: {$statusText}\n" .
+            "📅 Tanggal Order: " . $order->created_at->format('d/m/Y H:i') . "\n\n" .
             ($order->payment_status === 'paid' ?
                 "⏳ Pesanan Anda sedang dalam proses pengerjaan. Estimasi selesai 1-2 hari kerja.\n\n" : ($order->payment_status === 'pending' ?
                     "💰 Silakan lakukan pembayaran untuk memulai proses pengerjaan.\n\n" :
@@ -367,9 +406,6 @@ class WhatsAppWebhookController extends Controller
             "Terima kasih! 🙏";
     }
 
-    /**
-     * Get status text
-     */
     protected function getStatusText($status)
     {
         return [
@@ -379,70 +415,74 @@ class WhatsAppWebhookController extends Controller
         ][$status] ?? 'Unknown';
     }
 
-    /**
-     * Send auto-reply message
-     */
     protected function sendAutoReply($phone, $message)
     {
         try {
+            Log::info('Attempting to send auto-reply:', [
+                'phone' => $phone,
+                'message_length' => strlen($message),
+                'message_preview' => substr($message, 0, 100) . '...'
+            ]);
+
             $result = $this->whatsappService->sendMessage($phone, $message);
 
-            Log::info('Auto-reply sent', [
+            Log::info('Auto-reply result:', [
                 'phone' => $phone,
                 'success' => $result,
-                'message_preview' => substr($message, 0, 50) . '...'
+                'service_class' => get_class($this->whatsappService)
             ]);
 
             return $result;
         } catch (\Exception $e) {
-            Log::error('Failed to send auto-reply: ' . $e->getMessage());
+            Log::error('Failed to send auto-reply:', [
+                'phone' => $phone,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return false;
         }
     }
 
-    /**
-     * Test webhook functionality
-     */
     public function testWebhook(Request $request)
     {
         try {
-            // Test with real FONNTE format
+            // Use your actual webhook data for testing
             $testData = [
                 'quick' => false,
                 'device' => '6281330053572',
-                'pesan' => '*PEMBAYARAN BERHASIL*
+                'pesan' => '🎉 *PEMBAYARAN BERHASIL* 🎉
 
- *Detail Order:*
- Order: DOC20250612003
- Nama: Muhammad Kamil
- Phone: 6281383894808
- Layanan: Cek Plagiarisme Turnitin
- Total: Rp 5.000
- Metode: BSI
- File: 1749760919_Bakteri_Penyebab_Diare1[1].pdf
- Catatan: KDDLGKS
+📋 *Detail Order:*
+🔢 Order: DOC20250612004
+👤 Nama: Muhammad Kamil
+📱 Phone: 6281383894808
+🔧 Layanan: Cek Plagiarisme Turnitin
+💰 Total: Rp 5.000
+💳 Metode: BSI
+📎 File: 1749761392_LAPORAN PRAKTIKUM 03 BASIS DATA MUHAMMAD KAMIL.pdf
+📝 Catatan: Hshsns
 
- Saya telah melakukan pembayaran!
- Bukti transfer sudah diupload
+✅ Saya telah melakukan pembayaran!
+📸 Bukti transfer sudah diupload
 
-Mohon segera diproses ya. Terima kasih!',
+Mohon segera diproses ya. Terima kasih! 🙏',
                 'pengirim' => '6281383894808',
-                'message' => '*PEMBAYARAN BERHASIL*
+                'message' => '🎉 *PEMBAYARAN BERHASIL* 🎉
 
- *Detail Order:*
- Order: DOC20250612003
- Nama: Muhammad Kamil
- Phone: 6281383894808
- Layanan: Cek Plagiarisme Turnitin
- Total: Rp 5.000
- Metode: BSI
- File: 1749760919_Bakteri_Penyebab_Diare1[1].pdf
- Catatan: KDDLGKS
+📋 *Detail Order:*
+🔢 Order: DOC20250612004
+👤 Nama: Muhammad Kamil
+📱 Phone: 6281383894808
+🔧 Layanan: Cek Plagiarisme Turnitin
+💰 Total: Rp 5.000
+💳 Metode: BSI
+📎 File: 1749761392_LAPORAN PRAKTIKUM 03 BASIS DATA MUHAMMAD KAMIL.pdf
+📝 Catatan: Hshsns
 
- Saya telah melakukan pembayaran!
- Bukti transfer sudah diupload
+✅ Saya telah melakukan pembayaran!
+📸 Bukti transfer sudah diupload
 
-Mohon segera diproses ya. Terima kasih!',
+Mohon segera diproses ya. Terima kasih! 🙏',
                 'text' => 'non-button message',
                 'sender' => '6281383894808',
                 'name' => 'Anony_Loly',
@@ -451,33 +491,51 @@ Mohon segera diproses ya. Terima kasih!',
                 'isforwarded' => false
             ];
 
-            // Extract message and sender using the same logic as handleIncoming
-            $message = null;
-            $sender = null;
-
-            if (isset($testData['pesan']) && isset($testData['pengirim'])) {
-                $message = $testData['pesan'];
-                $sender = $testData['pengirim'];
-            }
-
+            // Process using the same logic
+            $message = $testData['pesan'];
+            $sender = $testData['pengirim'];
             $phone = preg_replace('/[^0-9]/', '', $sender);
 
-            // Process the test message
-            $this->processIncomingMessage($phone, $message);
+            // Test order extraction
+            $orderNumber = $this->extractOrderNumber($message);
+            $isPaymentConfirmation = $this->isPaymentConfirmation($message);
+
+            // Check if order exists
+            $order = null;
+            if ($orderNumber) {
+                $order = DocumentOrder::where('order_number', $orderNumber)->first();
+            }
+
+            // Process the message
+            $result = $this->processIncomingMessage($phone, $message);
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Test webhook executed successfully with FONNTE format',
-                'extracted_order' => $this->extractOrderNumber($message),
-                'is_payment_confirmation' => $this->isPaymentConfirmation($message),
-                'processed_phone' => $phone,
+                'message' => 'Test webhook executed successfully',
+                'debug_info' => [
+                    'extracted_order' => $orderNumber,
+                    'is_payment_confirmation' => $isPaymentConfirmation,
+                    'processed_phone' => $phone,
+                    'order_found' => $order ? true : false,
+                    'order_details' => $order ? [
+                        'id' => $order->id,
+                        'order_number' => $order->order_number,
+                        'payment_status' => $order->payment_status
+                    ] : null,
+                    'process_result' => $result
+                ],
                 'timestamp' => now()->toDateTimeString()
             ]);
         } catch (\Exception $e) {
-            Log::error('Test webhook error: ' . $e->getMessage());
+            Log::error('Test webhook error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'status' => 'error',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
             ], 500);
         }
     }

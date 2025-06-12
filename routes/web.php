@@ -128,3 +128,45 @@ Route::get('/debug-env', function () {
         'timestamp' => now()
     ]);
 });
+
+
+// Test di routes/web.php atau buat controller terpisah
+Route::get('/test-whatsapp', function () {
+    try {
+        $whatsappService = app(App\Services\WhatsAppService::class);
+
+        // Test kirim pesan
+        $result = $whatsappService->sendMessage('6281383894808', 'Test message dari sistem');
+
+        return response()->json([
+            'status' => 'success',
+            'result' => $result,
+            'service_class' => get_class($whatsappService)
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Test database
+Route::get('/test-order', function () {
+    $order = App\Models\DocumentOrder::where('order_number', 'DOC20250612004')->first();
+
+    if ($order) {
+        return response()->json([
+            'status' => 'found',
+            'order' => $order,
+            'total_orders' => App\Models\DocumentOrder::count()
+        ]);
+    } else {
+        return response()->json([
+            'status' => 'not_found',
+            'total_orders' => App\Models\DocumentOrder::count(),
+            'recent_orders' => App\Models\DocumentOrder::latest()->take(10)->pluck('order_number')
+        ]);
+    }
+});
