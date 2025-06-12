@@ -22,9 +22,9 @@ if (strpos($requestUri, '/api/webhook/whatsapp') !== false) {
     exit;
 }
 
-// Handle simple FONNTE test
-if (strpos($requestUri, '/simple-fonnte') !== false) {
-    simpleFonnteTest();
+// Handle debug FONNTE
+if (strpos($requestUri, '/debug-fonnte') !== false) {
+    debugFonnteComplete();
     exit;
 }
 
@@ -37,6 +37,69 @@ $response = $kernel->handle($request);
 $response->send();
 
 $kernel->terminate($request, $response);
+
+/**
+ * Debug FONNTE Complete - test semua kemungkinan
+ */
+function debugFonnteComplete()
+{
+    header('Content-Type: application/json');
+
+    $phone = $_GET['phone'] ?? '6281383894808';
+    $message = $_GET['message'] ?? 'Debug test simple';
+    $token = 'ejiQakcm45Vs2rZuWwPL';
+
+    $results = [];
+
+    // Test 1: Check device status
+    $deviceCheck = @file_get_contents('https://api.fonnte.com/device', false, stream_context_create([
+        'http' => [
+            'method' => 'POST',
+            'header' => "Authorization: {$token}\r\n",
+            'ignore_errors' => true
+        ],
+        'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]
+    ]));
+
+    $results['device_status'] = $deviceCheck ? json_decode($deviceCheck, true) : 'failed';
+
+    // Test 2: Simple API call
+    $postData = http_build_query(['target' => $phone, 'message' => $message]);
+
+    $apiResponse = @file_get_contents('https://api.fonnte.com/send', false, stream_context_create([
+        'http' => [
+            'method' => 'POST',
+            'header' => "Content-Type: application/x-www-form-urlencoded\r\nAuthorization: {$token}\r\n",
+            'content' => $postData,
+            'ignore_errors' => true
+        ],
+        'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]
+    ]));
+
+    $results['api_response'] = $apiResponse ? json_decode($apiResponse, true) : 'failed';
+    $results['raw_response'] = $apiResponse;
+
+    // Test 3: Check PHP environment
+    $results['php_info'] = [
+        'php_version' => PHP_VERSION,
+        'allow_url_fopen' => ini_get('allow_url_fopen') ? 'enabled' : 'disabled',
+        'openssl_version' => OPENSSL_VERSION_TEXT ?? 'not available',
+        'user_agent' => ini_get('user_agent'),
+        'curl_available' => function_exists('curl_init'),
+        'stream_context' => function_exists('stream_context_create'),
+        'file_get_contents' => function_exists('file_get_contents')
+    ];
+
+    // Test 4: Check last error
+    $results['last_error'] = error_get_last();
+
+    // Test 5: Headers check
+    if (function_exists('get_headers')) {
+        $results['fonnte_headers'] = @get_headers('https://api.fonnte.com/send');
+    }
+
+    echo json_encode($results, JSON_PRETTY_PRINT);
+}
 
 /**
  * Simple FONNTE test using exec (if available)
