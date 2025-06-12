@@ -22,9 +22,9 @@ if (strpos($requestUri, '/api/webhook/whatsapp') !== false) {
     exit;
 }
 
-// Handle test FONNTE API
-if (strpos($requestUri, '/test-fonnte') !== false) {
-    testFonnteAPI();
+// Handle simple FONNTE test
+if (strpos($requestUri, '/simple-fonnte') !== false) {
+    simpleFonnteTest();
     exit;
 }
 
@@ -37,6 +37,58 @@ $response = $kernel->handle($request);
 $response->send();
 
 $kernel->terminate($request, $response);
+
+/**
+ * Simple FONNTE test using exec (if available)
+ */
+function simpleFonnteTest()
+{
+    header('Content-Type: application/json');
+
+    $phone = $_GET['phone'] ?? '6281383894808';
+    $message = $_GET['message'] ?? '🧪 Test simple dari Vercel!';
+
+    // Try using exec curl (if available in Vercel)
+    $cmd = "curl -X POST https://api.fonnte.com/send " .
+        "-H 'Authorization: ejiQakcm45Vs2rZuWwPL' " .
+        "-d 'target=" . escapeshellarg($phone) . "' " .
+        "-d 'message=" . escapeshellarg($message) . "'";
+
+    error_log("EXEC CMD: " . $cmd);
+
+    $output = [];
+    $return_code = 0;
+
+    if (function_exists('exec')) {
+        exec($cmd, $output, $return_code);
+        $result = implode("\n", $output);
+
+        error_log("EXEC Result: " . $result);
+        error_log("EXEC Return Code: " . $return_code);
+
+        echo json_encode([
+            'status' => $return_code === 0 ? 'success' : 'failed',
+            'method' => 'exec_curl',
+            'phone' => $phone,
+            'message' => $message,
+            'output' => $result,
+            'return_code' => $return_code
+        ]);
+    } else {
+        error_log("EXEC not available, trying alternative");
+
+        // Fallback to our socket method
+        $result = sendWhatsAppMessage($phone, $message);
+
+        echo json_encode([
+            'status' => $result ? 'success' : 'failed',
+            'method' => 'socket',
+            'phone' => $phone,
+            'message' => $message,
+            'result' => $result
+        ]);
+    }
+}
 
 /**
  * Test FONNTE API directly
@@ -370,13 +422,13 @@ function handleGeneralMessage($phone, $message)
 }
 
 /**
- * Send WhatsApp message using FONNTE API (Fixed untuk Vercel)
+ * Send WhatsApp message using FONNTE API (Alternative method for Vercel)
  */
 function sendWhatsAppMessage($phone, $message)
 {
     $token = 'ejiQakcm45Vs2rZuWwPL';
 
-    // Clean phone number - ensure proper format
+    // Clean phone number
     $cleanPhone = preg_replace('/[^0-9]/', '', $phone);
     if (!str_starts_with($cleanPhone, '62')) {
         if (str_starts_with($cleanPhone, '0')) {
@@ -388,73 +440,88 @@ function sendWhatsAppMessage($phone, $message)
 
     error_log("FONNTE SEND - Phone: {$phone} -> {$cleanPhone}");
 
-    // Exact same format as successful curl command
-    $postData = 'target=' . urlencode($cleanPhone) .
-        '&message=' . urlencode($message);
+    // Try Method 1: Using wp_remote_post style (if available)
+    if (function_exists('wp_remote_post')) {
+        error_log("FONNTE SEND - Using wp_remote_post");
 
-    error_log("FONNTE SEND - Post data: " . $postData);
+        $response = wp_remote_post('https://api.fonnte.com/send', [
+            'headers' => [
+                'Authorization' => $token,
+                'Content-Type' => 'application/x-www-form-urlencoded'
+            ],
+            'body' => [
+                'target' => $cleanPhone,
+                'message' => $message
+            ],
+            'timeout' => 30
+        ]);
 
-    // Simple headers - exact same as curl
-    $headers = "Content-Type: application/x-www-form-urlencoded\r\n" .
-        "Authorization: {$token}\r\n" .
-        "Content-Length: " . strlen($postData) . "\r\n";
-
-    error_log("FONNTE SEND - Headers: " . str_replace("\r\n", " | ", $headers));
-
-    // Simplified stream context
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'POST',
-            'header' => $headers,
-            'content' => $postData,
-            'timeout' => 30,
-            'ignore_errors' => true
-        ]
-    ]);
-
-    try {
-        error_log("FONNTE SEND - Making API call to: https://api.fonnte.com/send");
-
-        $response = file_get_contents('https://api.fonnte.com/send', false, $context);
-
-        error_log("FONNTE RESPONSE - Raw: " . ($response ?: 'NULL/FALSE'));
-
-        if ($response === false) {
-            error_log("FONNTE ERROR: file_get_contents returned false");
-            $error = error_get_last();
-            if ($error) {
-                error_log("FONNTE ERROR Details: " . json_encode($error));
-            }
+        if (is_wp_error($response)) {
+            error_log("FONNTE ERROR: wp_remote_post failed - " . $response->get_error_message());
             return false;
         }
 
-        if (empty($response)) {
-            error_log("FONNTE ERROR: Empty response");
-            return false;
-        }
+        $body = wp_remote_retrieve_body($response);
+        $result = json_decode($body, true);
 
-        $result = json_decode($response, true);
+        error_log("FONNTE wp_remote_post result: " . json_encode($result));
 
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            error_log("FONNTE ERROR: JSON decode failed - " . json_last_error_msg());
-            error_log("FONNTE ERROR: Raw response was: " . $response);
-            return false;
-        }
+        return isset($result['status']) && $result['status'] === true ? $result : false;
+    }
 
-        error_log("FONNTE SUCCESS: " . json_encode($result));
+    // Method 2: Raw socket approach
+    error_log("FONNTE SEND - Using raw socket");
 
-        // Check if status is true (like the successful curl response)
-        if (isset($result['status']) && $result['status'] === true) {
-            return $result;
-        } else {
-            error_log("FONNTE FAILED: Status not true - " . json_encode($result));
-            return false;
-        }
-    } catch (\Exception $e) {
-        error_log("FONNTE EXCEPTION: " . $e->getMessage());
-        return false;
-    } catch (\Throwable $e) {
-        error_log("FONNTE THROWABLE: " . $e->getMessage());
+    $postData = 'target=' . urlencode($cleanPhone) . '&message=' . urlencode($message);
+    $postLength = strlen($postData);
+
+    $request = "POST /send HTTP/1.1\r\n";
+    $request .= "Host: api.fonnte.com\r\n";
+    $request .= "Authorization: {$token}\r\n";
+    $request .= "Content-Type: application/x-www-form-urlencoded\r\n";
+    $request .= "Content-Length: {$postLength}\r\n";
+    $request .= "Connection: close\r\n\r\n";
+    $request .= $postData;
+
+    error_log("FONNTE SEND - Raw request: " . str_replace("\r\n", "\\r\\n", $request));
+
+    // Open socket connection
+    $socket = @fsockopen('api.fonnte.com', 80, $errno, $errstr, 30);
+
+    if (!$socket) {
+        error_log("FONNTE ERROR: Socket connection failed - {$errno}: {$errstr}");
         return false;
     }
+
+    // Send request
+    fwrite($socket, $request);
+
+    // Get response
+    $response = '';
+    while (!feof($socket)) {
+        $response .= fgets($socket, 1024);
+    }
+    fclose($socket);
+
+    error_log("FONNTE SEND - Raw response: " . substr($response, 0, 500));
+
+    // Parse response
+    $parts = explode("\r\n\r\n", $response, 2);
+    if (count($parts) < 2) {
+        error_log("FONNTE ERROR: Invalid response format");
+        return false;
+    }
+
+    $body = $parts[1];
+    $result = json_decode($body, true);
+
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        error_log("FONNTE ERROR: JSON decode failed - " . json_last_error_msg());
+        error_log("FONNTE ERROR: Raw body was: " . $body);
+        return false;
+    }
+
+    error_log("FONNTE Socket result: " . json_encode($result));
+
+    return isset($result['status']) && $result['status'] === true ? $result : false;
 }
