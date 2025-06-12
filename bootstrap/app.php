@@ -23,6 +23,22 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web([
             \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
         ]);
+
+        // Register Admin Middleware Aliases
+        $middleware->alias([
+            'admin' => \App\Http\Middleware\AdminMiddleware::class,
+            'admin.guest' => \App\Http\Middleware\RedirectIfAdmin::class,
+            'admin.role' => \App\Http\Middleware\AdminRoleMiddleware::class,
+        ]);
+
+        // Optional: Register middleware groups
+        $middleware->group('admin-auth', [
+            \App\Http\Middleware\AdminMiddleware::class,
+        ]);
+
+        $middleware->group('admin-guest', [
+            \App\Http\Middleware\RedirectIfAdmin::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

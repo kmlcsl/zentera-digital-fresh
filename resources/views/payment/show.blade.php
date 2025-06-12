@@ -235,11 +235,10 @@
                                 <i class="fas fa-credit-card mr-1 text-blue-600"></i>Metode Pembayaran yang Digunakan
                             </label>
                             <div class="grid grid-cols-2 gap-4">
-                                <label
-                                    class="flex items-center p-4 border border-gray-300 rounded-lg cursor-pointer hover:bg-blue-50">
+                                <label class="flex items-center p-4 border border-gray-300 rounded-lg cursor-pointer hover:bg-blue-50">
                                     <input type="radio" name="payment_method" value="bsi" required class="mr-3">
                                     <div class="flex items-center">
-                                        <img src="{{ asset('payments/icon-bsi.png') }}" alt="Bank BSI" class="h-6 mr-2">
+                                        <img src="{{ asset('payments/icon-bsi.png') }}" alt="Bank BSI" class="h-6 mr-2 transform -translate-y-1">
                                     </div>
                                 </label>
                                 <label

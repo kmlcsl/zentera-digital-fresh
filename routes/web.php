@@ -1,10 +1,17 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Session;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\DocumentUploadController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\Auth\AdminLoginController;
+use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\OrderController;
+use App\Http\Controllers\Admin\SettingController;
+use App\Models\Setting;
 
 /*
 |--------------------------------------------------------------------------
@@ -20,6 +27,11 @@ use App\Http\Controllers\PaymentController;
 // Public Routes
 Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/products', [ProductController::class, 'index'])->name('products');
+
+// Redirect default login ke admin login (karena hanya ada admin login)
+Route::get('/login', function () {
+    return redirect()->route('admin.login');
+})->name('login');
 
 // Document Upload Routes
 Route::prefix('documents')->name('documents.')->group(function () {
@@ -38,6 +50,81 @@ Route::prefix('payment')->name('payment.')->group(function () {
     Route::post('/{orderNumber}/confirm', [PaymentController::class, 'confirm'])->name('confirm');
 });
 
+// Admin Authentication Routes
+Route::prefix('admin')->name('admin.')->group(function () {
+
+    // Login Routes (Guest Only)
+    Route::middleware('admin.guest')->group(function () {
+        Route::get('/login', [AdminLoginController::class, 'showLoginForm'])->name('login');
+        Route::post('/login', [AdminLoginController::class, 'login'])->name('login.submit');
+    });
+
+    // Logout Route (Admin Only)
+    Route::post('/logout', [AdminLoginController::class, 'logout'])->name('logout')->middleware('admin');
+
+    // Redirect /admin to dashboard or login
+    Route::get('/', function () {
+        if (Session::get('admin_logged_in') && Session::get('admin_id')) {
+            return redirect()->route('admin.dashboard');
+        }
+        return redirect()->route('admin.login');
+    });
+
+    // Protected Admin Routes (Admin Only)
+    Route::middleware('admin')->group(function () {
+
+        // Dashboard
+        Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+        Route::get('/dashboard/stats', [DashboardController::class, 'getStats'])->name('dashboard.stats');
+        Route::get('/dashboard/chart', [DashboardController::class, 'getChartData'])->name('dashboard.chart');
+        Route::get('/', function () {
+            if (Session::get('admin_logged_in') && Session::get('admin_id')) {
+                return redirect()->route('admin.dashboard');
+            }
+            return redirect()->route('admin.login');
+        });
+
+        // Product Management
+        Route::prefix('products')->name('products.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Admin\ProductController::class, 'index'])->name('index');
+            Route::get('/create', [\App\Http\Controllers\Admin\ProductController::class, 'create'])->name('create');
+            Route::post('/', [\App\Http\Controllers\Admin\ProductController::class, 'store'])->name('store');
+            Route::get('/{id}', [\App\Http\Controllers\Admin\ProductController::class, 'show'])->name('show');
+            Route::get('/{id}/edit', [\App\Http\Controllers\Admin\ProductController::class, 'edit'])->name('edit');
+            Route::put('/{id}', [\App\Http\Controllers\Admin\ProductController::class, 'update'])->name('update');
+            Route::delete('/{id}', [\App\Http\Controllers\Admin\ProductController::class, 'destroy'])->name('destroy');
+            Route::post('/toggle-visibility', [\App\Http\Controllers\Admin\ProductController::class, 'toggleVisibility'])->name('toggle.visibility');
+        });
+
+        // Orders Management
+        Route::prefix('orders')->name('orders.')->group(function () {
+            Route::get('/', [OrderController::class, 'index'])->name('index');
+            Route::get('filter', [OrderController::class, 'filter'])->name('filter');
+            Route::get('create', [OrderController::class, 'create'])->name('create');
+            Route::post('/', [OrderController::class, 'store'])->name('store');
+            Route::get('{id}', [OrderController::class, 'show'])->name('show');
+            Route::get('{id}/edit', [OrderController::class, 'edit'])->name('edit');
+            Route::put('{id}', [OrderController::class, 'update'])->name('update');
+            Route::delete('{id}', [OrderController::class, 'destroy'])->name('destroy');
+
+            // AJAX Routes
+            Route::get('{id}/details', [OrderController::class, 'getOrderDetails'])->name('details');
+            Route::post('{id}/update-payment-status', [OrderController::class, 'updatePaymentStatus'])->name('update-payment-status');
+            Route::get('{id}/download/{type}', [OrderController::class, 'downloadFile'])->name('download-file');
+            Route::get('export', [OrderController::class, 'export'])->name('export');
+        });
+
+        // Settings Management
+        Route::prefix('settings')->name('settings.')->group(function () {
+            Route::get('/', [SettingController::class, 'index'])->name('index');
+            Route::post('business', [SettingController::class, 'updateBusiness'])->name('business');
+            Route::post('profile', [SettingController::class, 'updateProfile'])->name('profile');
+            Route::put('/profile', [SettingController::class, 'updateProfile'])->name('profile.update');
+            Route::post('password', [SettingController::class, 'updatePassword'])->name('password');
+        });
+    });
+});
+
 // Storage access route for Vercel (karena tidak ada symlink)
 Route::get('/storage/{path}', function ($path) {
     $filePath = storage_path('app/public/' . $path);
@@ -53,12 +140,6 @@ Route::get('/storage/{path}', function ($path) {
         'Cache-Control' => 'public, max-age=31536000',
     ]);
 })->where('path', '.*');
-
-// Fallback route for 404
-Route::fallback(function () {
-    return redirect()->route('home');
-});
-
 
 // Tambahkan route debug di web.php (HAPUS SETELAH TEST)
 Route::get('/debug-files', function () {
@@ -100,4 +181,9 @@ Route::get('/debug-files', function () {
     }
 
     return response()->json($result, 200, [], JSON_PRETTY_PRINT);
+});
+
+// Fallback route for 404
+Route::fallback(function () {
+    return redirect()->route('home');
 });
