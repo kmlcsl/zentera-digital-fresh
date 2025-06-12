@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Request;
 use App\Classes\ListRoutes;
 
 /*
@@ -106,16 +107,26 @@ foreach ($adminRoutes as $key_list => $value_list) {
 }
 
 // Additional Routes
-Route::get('/login', function () {
-    return redirect()->route('admin.login');
-})->name('login');
+// Route::get('/login', function () {
+//     return redirect()->route('admin.login');
+// })->name('login');
 
-Route::get('/admin', function () {
-    if (Session::get('admin_logged_in') && Session::get('admin_id')) {
-        return redirect()->route('admin.dashboard');
-    }
-    return redirect()->route('admin.login');
-});
+// Route::get('/admin', function () {
+//     if (Session::get('admin_logged_in') && Session::get('admin_id')) {
+//         return redirect()->route('admin.dashboard');
+//     }
+//     return redirect()->route('admin.login');
+// });
+
+
+// Admin routes tanpa middleware
+Route::get('/admin/login', function () {
+    return view('admin.auth.login');
+})->name('admin.login');
+
+Route::post('/admin/login', function (Request $request) {
+    // Login logic
+})->name('admin.login.submit');
 
 // Fallback route for 404
 Route::fallback(function () {
