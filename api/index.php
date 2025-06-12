@@ -330,11 +330,28 @@ function sendWhatsAppMessage($phone, $message)
 {
     $token = 'ejiQakcm45Vs2rZuWwPL'; // Token FONNTE Anda
 
+    // Clean phone number - ensure proper format
+    $cleanPhone = preg_replace('/[^0-9]/', '', $phone);
+    if (!str_starts_with($cleanPhone, '62')) {
+        if (str_starts_with($cleanPhone, '0')) {
+            $cleanPhone = '62' . substr($cleanPhone, 1);
+        } else if (str_starts_with($cleanPhone, '8')) {
+            $cleanPhone = '62' . $cleanPhone;
+        }
+    }
+
     $data = [
-        'target' => $phone,
+        'target' => $cleanPhone,
         'message' => $message,
         'countryCode' => '62'
     ];
+
+    error_log("Sending WhatsApp message:", [
+        'original_phone' => $phone,
+        'clean_phone' => $cleanPhone,
+        'message_length' => strlen($message),
+        'data' => $data
+    ]);
 
     // Use stream context instead of cURL for Vercel compatibility
     $postData = http_build_query($data);
@@ -345,27 +362,55 @@ function sendWhatsAppMessage($phone, $message)
             'header' => [
                 'Content-Type: application/x-www-form-urlencoded',
                 'Authorization: ' . $token,
+                'User-Agent: Zentera-Digital-Bot/1.0',
                 'Content-Length: ' . strlen($postData)
             ],
             'content' => $postData,
-            'timeout' => 30
+            'timeout' => 30,
+            'ignore_errors' => true  // Important untuk dapat response meski ada error
         ]
     ]);
 
     try {
         $response = file_get_contents('https://api.fonnte.com/send', false, $context);
 
+        // Get HTTP response code
+        $http_code = 200;
+        if (isset($http_response_header)) {
+            foreach ($http_response_header as $header) {
+                if (strpos($header, 'HTTP/') === 0) {
+                    $http_code = intval(substr($header, 9, 3));
+                }
+            }
+        }
+
+        error_log("FONNTE API Response:", [
+            'http_code' => $http_code,
+            'response' => $response,
+            'headers' => $http_response_header ?? []
+        ]);
+
         if ($response === false) {
-            error_log("WhatsApp send failed: Unable to connect");
+            error_log("WhatsApp send failed: Unable to connect to FONNTE API");
             return false;
         }
 
-        error_log("WhatsApp send response: " . $response);
         $result = json_decode($response, true);
 
-        return $result;
+        if ($http_code !== 200) {
+            error_log("FONNTE API Error: HTTP {$http_code} - " . $response);
+            return false;
+        }
+
+        if ($result && isset($result['status']) && $result['status'] === true) {
+            error_log("WhatsApp message sent successfully: " . json_encode($result));
+            return $result;
+        } else {
+            error_log("FONNTE API failed: " . json_encode($result));
+            return false;
+        }
     } catch (\Exception $e) {
-        error_log("WhatsApp send error: " . $e->getMessage());
+        error_log("WhatsApp send exception: " . $e->getMessage());
         return false;
     }
 }
