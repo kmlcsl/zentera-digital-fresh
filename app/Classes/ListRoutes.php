@@ -148,7 +148,7 @@ class ListRoutes
                         'url' => '/webhook/whatsapp',
                         'controller' => 'App\Http\Controllers\WhatsAppWebhookController@handleIncoming',
                         'name' => 'webhook.whatsapp.post',
-                        'middleware' => '',
+                        'middleware' => 'api', // Use api middleware instead of web
                     ],
                     [
                         'type' => 'webhook',
@@ -156,7 +156,7 @@ class ListRoutes
                         'url' => '/webhook/whatsapp',
                         'controller' => 'App\Http\Controllers\WhatsAppWebhookController@handleIncoming',
                         'name' => 'webhook.whatsapp.get',
-                        'middleware' => '',
+                        'middleware' => 'api', // Use api middleware instead of web
                     ],
                     [
                         'type' => 'webhook',
@@ -164,7 +164,7 @@ class ListRoutes
                         'url' => '/webhook/whatsapp/test',
                         'controller' => 'App\Http\Controllers\WhatsAppWebhookController@testWebhook',
                         'name' => 'webhook.whatsapp.test',
-                        'middleware' => '',
+                        'middleware' => 'api', // Use api middleware instead of web
                     ]
                 ]
             ]

@@ -78,3 +78,14 @@ Route::get('/test-wa', function () {
         'message' => $result ? 'Pesan terkirim' : 'Gagal mengirim'
     ]);
 });
+
+// WhatsApp Webhook Routes - tanpa CSRF protection
+Route::post('/webhook/whatsapp', [App\Http\Controllers\WhatsAppWebhookController::class, 'handleIncoming'])
+    ->name('webhook.whatsapp.post')
+    ->withoutMiddleware(['csrf']); // Explicitly exclude CSRF
+
+Route::get('/webhook/whatsapp', [App\Http\Controllers\WhatsAppWebhookController::class, 'handleIncoming'])
+    ->name('webhook.whatsapp.get');
+
+Route::get('/webhook/whatsapp/test', [App\Http\Controllers\WhatsAppWebhookController::class, 'testWebhook'])
+    ->name('webhook.whatsapp.test');

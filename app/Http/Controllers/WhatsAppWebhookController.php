@@ -93,12 +93,16 @@ class WhatsAppWebhookController extends Controller
             }
 
             // Process the message
-            $this->processIncomingMessage($phone, $message);
+            $result = $this->processIncomingMessage($phone, $message);
 
-            return response()->json(['status' => 'success']);
+            return response()->json(['status' => 'success'])
+                ->header('Content-Type', 'application/json')
+                ->header('Access-Control-Allow-Origin', '*')
+                ->header('Cache-Control', 'no-cache');
         } catch (\Exception $e) {
             Log::error('WhatsApp Webhook Error: ' . $e->getMessage());
-            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500)
+                ->header('Content-Type', 'application/json');
         }
     }
 
