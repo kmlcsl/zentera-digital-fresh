@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Log;
 use App\Models\Product;
 
-class ProductController extends Controller
+class AdminProductController extends Controller
 {
     /**
      * Display products list
