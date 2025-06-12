@@ -116,3 +116,15 @@ Route::get('/webhook-debug', function () {
         'timestamp' => now()
     ]);
 });
+
+Route::get('/debug-env', function () {
+    return response()->json([
+        'app_env' => env('APP_ENV'),
+        'app_debug' => env('APP_DEBUG'),
+        'fonnte_token_exists' => !empty(env('FONNTE_API_TOKEN')),
+        'fonnte_token_length' => strlen(env('FONNTE_API_TOKEN', '')),
+        'whatsapp_number' => env('WHATSAPP_NUMBER'),
+        'services_fonnte_token' => !empty(config('services.fonnte.token')),
+        'timestamp' => now()
+    ]);
+});
