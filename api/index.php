@@ -387,32 +387,25 @@ function sendWhatsAppMessage($phone, $message)
     }
 
     error_log("FONNTE SEND - Phone: {$phone} -> {$cleanPhone}");
-    error_log("FONNTE SEND - Message length: " . strlen($message));
 
-    // Data untuk FONNTE API
-    $postData = http_build_query([
-        'target' => $cleanPhone,
-        'message' => $message,
-        'countryCode' => '62'
-    ]);
+    // Exact same format as successful curl command
+    $postData = 'target=' . urlencode($cleanPhone) .
+        '&message=' . urlencode($message);
 
     error_log("FONNTE SEND - Post data: " . $postData);
 
-    // Headers yang benar untuk FONNTE
-    $headers = [
-        'Content-Type: application/x-www-form-urlencoded',
-        'Authorization: ' . $token,
-        'Content-Length: ' . strlen($postData),
-        'User-Agent: Zentera-Digital-Bot/1.0'
-    ];
+    // Simple headers - exact same as curl
+    $headers = "Content-Type: application/x-www-form-urlencoded\r\n" .
+        "Authorization: {$token}\r\n" .
+        "Content-Length: " . strlen($postData) . "\r\n";
 
-    error_log("FONNTE SEND - Headers: " . json_encode($headers));
+    error_log("FONNTE SEND - Headers: " . str_replace("\r\n", " | ", $headers));
 
-    // Stream context
+    // Simplified stream context
     $context = stream_context_create([
         'http' => [
             'method' => 'POST',
-            'header' => implode("\r\n", $headers),
+            'header' => $headers,
             'content' => $postData,
             'timeout' => 30,
             'ignore_errors' => true
@@ -420,58 +413,48 @@ function sendWhatsAppMessage($phone, $message)
     ]);
 
     try {
-        error_log("FONNTE SEND - Making API call...");
+        error_log("FONNTE SEND - Making API call to: https://api.fonnte.com/send");
+
         $response = file_get_contents('https://api.fonnte.com/send', false, $context);
 
-        // Parse HTTP response code
-        $http_code = 200;
-        $response_headers = [];
-        if (isset($http_response_header)) {
-            $response_headers = $http_response_header;
-            foreach ($http_response_header as $header) {
-                if (strpos($header, 'HTTP/') === 0) {
-                    $parts = explode(' ', $header);
-                    if (isset($parts[1])) {
-                        $http_code = intval($parts[1]);
-                    }
-                }
-            }
-        }
-
-        error_log("FONNTE API Response - HTTP Code: {$http_code}");
-        error_log("FONNTE API Response - Body: " . ($response ?: 'empty'));
-        error_log("FONNTE API Response - Headers: " . json_encode($response_headers));
+        error_log("FONNTE RESPONSE - Raw: " . ($response ?: 'NULL/FALSE'));
 
         if ($response === false) {
             error_log("FONNTE ERROR: file_get_contents returned false");
+            $error = error_get_last();
+            if ($error) {
+                error_log("FONNTE ERROR Details: " . json_encode($error));
+            }
             return false;
         }
 
         if (empty($response)) {
-            error_log("FONNTE ERROR: Empty response received");
+            error_log("FONNTE ERROR: Empty response");
             return false;
         }
 
         $result = json_decode($response, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
-            error_log("FONNTE ERROR: Invalid JSON response: " . json_last_error_msg());
+            error_log("FONNTE ERROR: JSON decode failed - " . json_last_error_msg());
+            error_log("FONNTE ERROR: Raw response was: " . $response);
             return false;
         }
 
-        error_log("FONNTE API Parsed Result: " . json_encode($result));
+        error_log("FONNTE SUCCESS: " . json_encode($result));
 
-        // Check success
+        // Check if status is true (like the successful curl response)
         if (isset($result['status']) && $result['status'] === true) {
-            error_log("FONNTE SUCCESS: Message sent successfully");
             return $result;
         } else {
-            error_log("FONNTE FAILED: " . json_encode($result));
+            error_log("FONNTE FAILED: Status not true - " . json_encode($result));
             return false;
         }
     } catch (\Exception $e) {
         error_log("FONNTE EXCEPTION: " . $e->getMessage());
-        error_log("FONNTE EXCEPTION TRACE: " . $e->getTraceAsString());
+        return false;
+    } catch (\Throwable $e) {
+        error_log("FONNTE THROWABLE: " . $e->getMessage());
         return false;
     }
 }
