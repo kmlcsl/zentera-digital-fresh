@@ -22,9 +22,9 @@ if (strpos($requestUri, '/api/webhook/whatsapp') !== false) {
     exit;
 }
 
-// Handle webhook status dari FONNTE
-if (strpos($requestUri, '/webhook/status') !== false) {
-    handleWebhookStatus();
+// Handle test FONNTE API
+if (strpos($requestUri, '/test-fonnte') !== false) {
+    testFonnteAPI();
     exit;
 }
 
@@ -37,6 +37,29 @@ $response = $kernel->handle($request);
 $response->send();
 
 $kernel->terminate($request, $response);
+
+/**
+ * Test FONNTE API directly
+ */
+function testFonnteAPI()
+{
+    header('Content-Type: application/json');
+
+    $phone = $_GET['phone'] ?? '6281383894808';
+    $message = $_GET['message'] ?? '🧪 Test pesan dari Zentera Digital Bot! 🤖';
+
+    error_log("Testing FONNTE API with phone: {$phone}");
+
+    $result = sendWhatsAppMessage($phone, $message);
+
+    echo json_encode([
+        'status' => $result ? 'success' : 'failed',
+        'phone' => $phone,
+        'message' => $message,
+        'result' => $result,
+        'timestamp' => date('Y-m-d H:i:s')
+    ]);
+}
 
 /**
  * Handle webhook status dari FONNTE
@@ -99,6 +122,19 @@ function handleWhatsAppWebhook()
             // Get raw input
             $rawInput = file_get_contents('php://input');
             $data = json_decode($rawInput, true);
+
+            // ENHANCED LOGGING untuk real webhook
+            error_log("=== REAL WEBHOOK RECEIVED ===");
+            error_log("Raw Input: " . $rawInput);
+            error_log("Parsed Data: " . json_encode($data, JSON_PRETTY_PRINT));
+            error_log("Headers: " . json_encode(getallheaders() ?: [], JSON_PRETTY_PRINT));
+            error_log("Server Info: " . json_encode([
+                'REQUEST_METHOD' => $_SERVER['REQUEST_METHOD'],
+                'REQUEST_URI' => $_SERVER['REQUEST_URI'],
+                'HTTP_USER_AGENT' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
+                'REMOTE_ADDR' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+            ]));
+            error_log("==============================");
 
             // Validate JSON data
             if (!$data) {
@@ -165,11 +201,13 @@ function handleWhatsAppWebhook()
 
             // Extract order number
             $orderNumber = extractOrderNumber($message);
-            error_log("Extracted order number: " . ($orderNumber ?: 'none'));
+            error_log("PROCESSING: phone={$phone}, order={$orderNumber}");
 
             if ($orderNumber) {
+                error_log("CALLING: handleOrderMessage");
                 handleOrderMessage($phone, $orderNumber, $message);
             } else {
+                error_log("CALLING: handleGeneralMessage");
                 handleGeneralMessage($phone, $message);
             }
         }
@@ -241,10 +279,10 @@ function isPaymentConfirmation($message)
  */
 function handleOrderMessage($phone, $orderNumber, $message)
 {
-    error_log("Handling order message for: {$orderNumber}");
-
-    // Since we can't easily access Laravel models here, send a generic response
-    // You might need to implement database connection manually or use Laravel's container
+    error_log("=== HANDLING ORDER MESSAGE ===");
+    error_log("Phone: {$phone}");
+    error_log("Order: {$orderNumber}");
+    error_log("Is Payment: " . (isPaymentConfirmation($message) ? 'YES' : 'NO'));
 
     if (isPaymentConfirmation($message)) {
         $replyMessage = "✅ **PEMBAYARAN DITERIMA**\n\n" .
@@ -256,13 +294,16 @@ function handleOrderMessage($phone, $orderNumber, $message)
             "Terima kasih atas kepercayaan Anda! 🙏\n\n" .
             "Zentera Digital - Solusi Dokumen Terpercaya ✨";
 
-        sendWhatsAppMessage($phone, $replyMessage);
+        error_log("SENDING PAYMENT CONFIRMATION to {$phone}");
+        $sendResult = sendWhatsAppMessage($phone, $replyMessage);
+        error_log("SEND RESULT: " . json_encode($sendResult));
 
         echo json_encode([
             'status' => 'success',
             'action' => 'payment_confirmed',
             'order_number' => $orderNumber,
-            'phone' => $phone
+            'phone' => $phone,
+            'send_result' => $sendResult
         ]);
     } else {
         $replyMessage = "Terima kasih atas pesan Anda terkait order #{$orderNumber}.\n\n" .
@@ -271,15 +312,20 @@ function handleOrderMessage($phone, $orderNumber, $message)
             "Jika ada pertanyaan lebih lanjut, silakan hubungi customer service kami.\n\n" .
             "Terima kasih! 🙏";
 
-        sendWhatsAppMessage($phone, $replyMessage);
+        error_log("SENDING ORDER INQUIRY to {$phone}");
+        $sendResult = sendWhatsAppMessage($phone, $replyMessage);
+        error_log("SEND RESULT: " . json_encode($sendResult));
 
         echo json_encode([
             'status' => 'success',
             'action' => 'order_inquiry',
             'order_number' => $orderNumber,
-            'phone' => $phone
+            'phone' => $phone,
+            'send_result' => $sendResult
         ]);
     }
+
+    error_log("=== ORDER MESSAGE HANDLED ===");
 }
 
 /**
