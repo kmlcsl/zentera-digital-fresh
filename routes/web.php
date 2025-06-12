@@ -189,3 +189,16 @@ Route::get('/admin', function () {
 Route::fallback(function () {
     return redirect()->route('home');
 });
+
+
+Route::get('/debug-controllers', function () {
+    $controllers = [
+        'ProductController' => file_exists(app_path('Http/Controllers/Admin/ProductController.php')),
+        'DashboardController' => file_exists(app_path('Http/Controllers/Admin/DashboardController.php')),
+        'Directory exists' => is_dir(app_path('Http/Controllers/Admin')),
+        'Files in Admin' => is_dir(app_path('Http/Controllers/Admin')) ?
+            scandir(app_path('Http/Controllers/Admin')) : 'No directory'
+    ];
+
+    return response()->json($controllers);
+});
