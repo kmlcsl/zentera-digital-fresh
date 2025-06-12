@@ -50,24 +50,46 @@ class WhatsAppWebhookController extends Controller
             Log::info('WhatsApp Webhook Received:', [
                 'method' => $request->method(),
                 'data' => $request->all(),
-                'headers' => $request->header('User-Agent')
+                'raw_input' => $request->getContent()
             ]);
 
             $data = $request->all();
 
+            // Handle different FONNTE webhook formats
+            $message = null;
+            $sender = null;
+
+            // Format 1: Standard format
+            if (isset($data['message']) && isset($data['sender'])) {
+                $message = $data['message'];
+                $sender = $data['sender'];
+            }
+            // Format 2: FONNTE format with 'pesan' and 'pengirim'
+            elseif (isset($data['pesan']) && isset($data['pengirim'])) {
+                $message = $data['pesan'];
+                $sender = $data['pengirim'];
+            }
+            // Format 3: Alternative format
+            elseif (isset($data['text']) && isset($data['sender'])) {
+                $message = $data['text'];
+                $sender = $data['sender'];
+            }
+
             // Validate webhook data
-            if (!isset($data['message']) || !isset($data['sender'])) {
-                Log::warning('Invalid webhook data received', $data);
+            if (!$message || !$sender) {
+                Log::warning('Invalid webhook data - no message or sender found', $data);
                 return response()->json(['status' => 'invalid_data'], 400);
             }
 
-            $message = $data['message'];
-            $sender = $data['sender']; // Format: 6281383894808@s.whatsapp.net
+            // Clean phone number - remove @s.whatsapp.net if present
             $phone = str_replace('@s.whatsapp.net', '', $sender);
+            $phone = preg_replace('/[^0-9]/', '', $phone); // Keep only numbers
 
-            // Skip if message is from our own bot
-            if (isset($data['fromMe']) && $data['fromMe']) {
-                return response()->json(['status' => 'ignored_own_message']);
+            // Skip if message is from our own bot or if it's a group
+            if ((isset($data['fromMe']) && $data['fromMe']) ||
+                (isset($data['isgroup']) && $data['isgroup'])
+            ) {
+                return response()->json(['status' => 'ignored_message']);
             }
 
             // Process the message
@@ -380,34 +402,71 @@ class WhatsAppWebhookController extends Controller
     public function testWebhook(Request $request)
     {
         try {
-            // Simulate incoming message from customer
+            // Test with real FONNTE format
             $testData = [
-                'message' => 'PEMBAYARAN BERHASIL
-Detail Order:
-Order: DOC20250612002
-Nama: Muhammad Kamil
-Phone: 6281383894808
-Layanan: Cek Plagiarisme Turnitin
-Total: Rp 5.000
-Metode: BSI
-File: 1749759698_Bakteri_Penyebab_Diare1[1].pdf
-Catatan: GJH
-Saya telah melakukan pembayaran!
-Bukti transfer sudah diupload
+                'quick' => false,
+                'device' => '6281330053572',
+                'pesan' => '*PEMBAYARAN BERHASIL*
+
+ *Detail Order:*
+ Order: DOC20250612003
+ Nama: Muhammad Kamil
+ Phone: 6281383894808
+ Layanan: Cek Plagiarisme Turnitin
+ Total: Rp 5.000
+ Metode: BSI
+ File: 1749760919_Bakteri_Penyebab_Diare1[1].pdf
+ Catatan: KDDLGKS
+
+ Saya telah melakukan pembayaran!
+ Bukti transfer sudah diupload
+
 Mohon segera diproses ya. Terima kasih!',
-                'sender' => '6281383894808@s.whatsapp.net',
-                'device' => 'test_device',
-                'fromMe' => false
+                'pengirim' => '6281383894808',
+                'message' => '*PEMBAYARAN BERHASIL*
+
+ *Detail Order:*
+ Order: DOC20250612003
+ Nama: Muhammad Kamil
+ Phone: 6281383894808
+ Layanan: Cek Plagiarisme Turnitin
+ Total: Rp 5.000
+ Metode: BSI
+ File: 1749760919_Bakteri_Penyebab_Diare1[1].pdf
+ Catatan: KDDLGKS
+
+ Saya telah melakukan pembayaran!
+ Bukti transfer sudah diupload
+
+Mohon segera diproses ya. Terima kasih!',
+                'text' => 'non-button message',
+                'sender' => '6281383894808',
+                'name' => 'Anony_Loly',
+                'type' => 'text',
+                'isgroup' => false,
+                'isforwarded' => false
             ];
 
+            // Extract message and sender using the same logic as handleIncoming
+            $message = null;
+            $sender = null;
+
+            if (isset($testData['pesan']) && isset($testData['pengirim'])) {
+                $message = $testData['pesan'];
+                $sender = $testData['pengirim'];
+            }
+
+            $phone = preg_replace('/[^0-9]/', '', $sender);
+
             // Process the test message
-            $this->processIncomingMessage('6281383894808', $testData['message']);
+            $this->processIncomingMessage($phone, $message);
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Test webhook executed successfully',
-                'extracted_order' => $this->extractOrderNumber($testData['message']),
-                'is_payment_confirmation' => $this->isPaymentConfirmation($testData['message']),
+                'message' => 'Test webhook executed successfully with FONNTE format',
+                'extracted_order' => $this->extractOrderNumber($message),
+                'is_payment_confirmation' => $this->isPaymentConfirmation($message),
+                'processed_phone' => $phone,
                 'timestamp' => now()->toDateTimeString()
             ]);
         } catch (\Exception $e) {
