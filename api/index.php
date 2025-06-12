@@ -485,7 +485,7 @@ function handleGeneralMessage($phone, $message)
 }
 
 /**
- * Send WhatsApp message using FONNTE API (Simplified untuk Vercel)
+ * Send WhatsApp message using FONNTE API (Fix Unauthorized Issue)
  */
 function sendWhatsAppMessage($phone, $message)
 {
@@ -503,27 +503,32 @@ function sendWhatsAppMessage($phone, $message)
 
     error_log("FONNTE SEND - Phone: {$phone} -> {$cleanPhone}");
 
-    // Prepare POST data exactly like successful curl
-    $postFields = [
+    // Add proper headers to mimic successful curl request
+    $postData = http_build_query([
         'target' => $cleanPhone,
         'message' => $message
+    ]);
+
+    $headers = [
+        "Content-Type: application/x-www-form-urlencoded",
+        "Authorization: {$token}",
+        "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Accept: application/json, text/plain, */*",
+        "Accept-Language: id-ID,id;q=0.9,en;q=0.8",
+        "Cache-Control: no-cache",
+        "Pragma: no-cache",
+        "Connection: keep-alive"
     ];
-
-    error_log("FONNTE SEND - Data: " . json_encode($postFields));
-
-    // Try multiple methods - start with the most compatible
-
-    // Method 1: Standard file_get_contents with proper SSL context
-    $postData = http_build_query($postFields);
 
     $context = stream_context_create([
         'http' => [
             'method' => 'POST',
-            'header' => "Content-Type: application/x-www-form-urlencoded\r\n" .
-                "Authorization: {$token}\r\n",
+            'header' => implode("\r\n", $headers),
             'content' => $postData,
             'timeout' => 45,
-            'ignore_errors' => true
+            'ignore_errors' => true,
+            'follow_location' => true,
+            'max_redirects' => 3
         ],
         'ssl' => [
             'verify_peer' => false,
@@ -533,65 +538,84 @@ function sendWhatsAppMessage($phone, $message)
         ]
     ]);
 
-    error_log("FONNTE SEND - Attempting file_get_contents...");
+    error_log("FONNTE SEND - Making request with proper headers...");
 
     $response = @file_get_contents('https://api.fonnte.com/send', false, $context);
 
-    if ($response !== false && !empty($response)) {
-        error_log("FONNTE SUCCESS - file_get_contents worked: " . $response);
-
-        $result = json_decode($response, true);
-        if ($result && isset($result['status']) && $result['status'] === true) {
-            return $result;
+    if ($response === false) {
+        error_log("FONNTE ERROR: Request failed");
+        $error = error_get_last();
+        if ($error) {
+            error_log("FONNTE ERROR Details: " . json_encode($error));
         }
+        return false;
     }
 
-    // Method 2: Using fsockopen with manual HTTP request
-    error_log("FONNTE FALLBACK - Trying fsockopen...");
+    error_log("FONNTE RAW RESPONSE: " . $response);
 
-    $host = 'api.fonnte.com';
-    $port = 443;
-    $timeout = 30;
+    $result = json_decode($response, true);
+
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        error_log("FONNTE JSON ERROR: " . json_last_error_msg());
+        return false;
+    }
+
+    if (isset($result['reason']) && $result['reason'] === 'unauthorized token usage') {
+        error_log("FONNTE UNAUTHORIZED: Token issue detected");
+        // Try alternative approach
+        return sendWhatsAppAlternative($cleanPhone, $message, $token);
+    }
+
+    if (isset($result['status']) && $result['status'] === true) {
+        error_log("FONNTE SUCCESS: " . json_encode($result));
+        return $result;
+    } else {
+        error_log("FONNTE FAILED: " . json_encode($result));
+        return false;
+    }
+}
+
+/**
+ * Alternative FONNTE method untuk bypass unauthorized
+ */
+function sendWhatsAppAlternative($phone, $message, $token)
+{
+    error_log("FONNTE ALTERNATIVE - Trying different approach");
+
+    // Method 1: Add delay to avoid rate limiting
+    usleep(500000); // 0.5 second delay
+
+    // Method 2: Use different User-Agent and headers
+    $postData = "target=" . urlencode($phone) . "&message=" . urlencode($message);
 
     $context = stream_context_create([
+        'http' => [
+            'method' => 'POST',
+            'header' => "Content-Type: application/x-www-form-urlencoded\r\n" .
+                "Authorization: {$token}\r\n" .
+                "User-Agent: curl/7.68.0\r\n" .
+                "Accept: */*\r\n",
+            'content' => $postData,
+            'timeout' => 30,
+            'ignore_errors' => true
+        ],
         'ssl' => [
             'verify_peer' => false,
             'verify_peer_name' => false
         ]
     ]);
 
-    $socket = @stream_socket_client("ssl://{$host}:{$port}", $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT, $context);
+    $response = @file_get_contents('https://api.fonnte.com/send', false, $context);
 
-    if ($socket) {
-        $request = "POST /send HTTP/1.1\r\n";
-        $request .= "Host: {$host}\r\n";
-        $request .= "Authorization: {$token}\r\n";
-        $request .= "Content-Type: application/x-www-form-urlencoded\r\n";
-        $request .= "Content-Length: " . strlen($postData) . "\r\n";
-        $request .= "Connection: close\r\n\r\n";
-        $request .= $postData;
+    if ($response) {
+        $result = json_decode($response, true);
+        error_log("FONNTE ALTERNATIVE RESULT: " . json_encode($result));
 
-        fwrite($socket, $request);
-
-        $response = '';
-        while (!feof($socket)) {
-            $response .= fread($socket, 8192);
-        }
-        fclose($socket);
-
-        if (preg_match('/\r\n\r\n(.+)$/s', $response, $matches)) {
-            $body = $matches[1];
-            error_log("FONNTE SOCKET SUCCESS: " . $body);
-
-            $result = json_decode($body, true);
-            if ($result && isset($result['status']) && $result['status'] === true) {
-                return $result;
-            }
+        if (isset($result['status']) && $result['status'] === true) {
+            return $result;
         }
     }
 
-    error_log("FONNTE ERROR - All methods failed");
-    error_log("FONNTE ERROR - Last error: " . json_encode(error_get_last()));
-
+    error_log("FONNTE ALTERNATIVE FAILED");
     return false;
 }
