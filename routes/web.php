@@ -6,12 +6,10 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\DocumentUploadController;
 use App\Http\Controllers\PaymentController;
-use App\Http\Controllers\Auth\AdminLoginController;
-use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Admin\AdminLoginController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\SettingController;
-use App\Models\Setting;
 
 /*
 |--------------------------------------------------------------------------
@@ -53,14 +51,10 @@ Route::prefix('payment')->name('payment.')->group(function () {
 // Admin Authentication Routes
 Route::prefix('admin')->name('admin.')->group(function () {
 
-    // Login Routes (Guest Only)
-    Route::middleware('admin.guest')->group(function () {
-        Route::get('/login', [AdminLoginController::class, 'showLoginForm'])->name('login');
-        Route::post('/login', [AdminLoginController::class, 'login'])->name('login.submit');
-    });
-
-    // Logout Route (Admin Only)
-    Route::post('/logout', [AdminLoginController::class, 'logout'])->name('logout')->middleware('admin');
+    // Ganti semua AdminLoginController dengan namespace baru:
+    Route::get('/login', [AdminLoginController::class, 'showLoginForm'])->name('login');
+    Route::post('/login', [AdminLoginController::class, 'login'])->name('login.submit');
+    Route::post('/logout', [AdminLoginController::class, 'logout'])->name('logout');
 
     // Redirect /admin to dashboard or login
     Route::get('/', function () {

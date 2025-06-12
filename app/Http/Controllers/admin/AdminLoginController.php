@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Auth;
+namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -10,17 +10,11 @@ use App\Models\AdminUser;
 
 class AdminLoginController extends Controller
 {
-    /**
-     * Show admin login form
-     */
     public function showLoginForm()
     {
         return view('admin.auth.login');
     }
 
-    /**
-     * Handle admin login
-     */
     public function login(Request $request)
     {
         $request->validate([
@@ -34,40 +28,26 @@ class AdminLoginController extends Controller
                 ->first();
 
             if ($admin && Hash::check($request->password, $admin->password)) {
-                // Set session
                 Session::put('admin_logged_in', true);
                 Session::put('admin_id', $admin->id);
                 Session::put('admin_name', $admin->name);
                 Session::put('admin_email', $admin->email);
                 Session::put('admin_role', $admin->role);
 
-                // Update last login
                 $admin->updateLastLogin($request->ip());
 
-                return redirect()->route('admin.dashboard')
-                    ->with('success', 'Login berhasil! Selamat datang ' . $admin->name);
+                return redirect()->route('admin.dashboard');
             }
 
-            return back()->withErrors(['login' => 'Email atau password salah!'])
-                ->withInput($request->only('email'));
+            return back()->withErrors(['login' => 'Email atau password salah!']);
         } catch (\Exception $e) {
             return back()->withErrors(['login' => 'Terjadi kesalahan sistem.']);
         }
     }
 
-    /**
-     * Handle admin logout
-     */
     public function logout()
     {
-        Session::forget([
-            'admin_logged_in',
-            'admin_id',
-            'admin_name',
-            'admin_email',
-            'admin_role'
-        ]);
-
-        return redirect()->route('admin.login')->with('success', 'Logout berhasil!');
+        Session::forget(['admin_logged_in', 'admin_id', 'admin_name', 'admin_email', 'admin_role']);
+        return redirect()->route('admin.login');
     }
 }
