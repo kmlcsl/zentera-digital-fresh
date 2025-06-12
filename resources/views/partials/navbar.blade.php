@@ -33,7 +33,7 @@
                 </a>
 
                 <!-- Admin Login (Hidden Button) -->
-                <a href="{{ route('admin.login') }}"
+                <a href="#"
                     class="hidden text-white hover:text-red-300 transition-colors duration-300 font-medium"
                     id="adminLink">
                     <i class="fas fa-user-shield mr-2"></i>Admin
