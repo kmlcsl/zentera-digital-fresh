@@ -422,7 +422,7 @@ function handleGeneralMessage($phone, $message)
 }
 
 /**
- * Send WhatsApp message using FONNTE API (Alternative method for Vercel)
+ * Send WhatsApp message using FONNTE API (HTTPS Socket untuk Vercel)
  */
 function sendWhatsAppMessage($phone, $message)
 {
@@ -440,38 +440,7 @@ function sendWhatsAppMessage($phone, $message)
 
     error_log("FONNTE SEND - Phone: {$phone} -> {$cleanPhone}");
 
-    // Try Method 1: Using wp_remote_post style (if available)
-    if (function_exists('wp_remote_post')) {
-        error_log("FONNTE SEND - Using wp_remote_post");
-
-        $response = wp_remote_post('https://api.fonnte.com/send', [
-            'headers' => [
-                'Authorization' => $token,
-                'Content-Type' => 'application/x-www-form-urlencoded'
-            ],
-            'body' => [
-                'target' => $cleanPhone,
-                'message' => $message
-            ],
-            'timeout' => 30
-        ]);
-
-        if (is_wp_error($response)) {
-            error_log("FONNTE ERROR: wp_remote_post failed - " . $response->get_error_message());
-            return false;
-        }
-
-        $body = wp_remote_retrieve_body($response);
-        $result = json_decode($body, true);
-
-        error_log("FONNTE wp_remote_post result: " . json_encode($result));
-
-        return isset($result['status']) && $result['status'] === true ? $result : false;
-    }
-
-    // Method 2: Raw socket approach
-    error_log("FONNTE SEND - Using raw socket");
-
+    // Use HTTPS socket with SSL context
     $postData = 'target=' . urlencode($cleanPhone) . '&message=' . urlencode($message);
     $postLength = strlen($postData);
 
@@ -483,14 +452,25 @@ function sendWhatsAppMessage($phone, $message)
     $request .= "Connection: close\r\n\r\n";
     $request .= $postData;
 
-    error_log("FONNTE SEND - Raw request: " . str_replace("\r\n", "\\r\\n", $request));
+    error_log("FONNTE SEND - HTTPS request");
 
-    // Open socket connection
-    $socket = @fsockopen('api.fonnte.com', 80, $errno, $errstr, 30);
+    // Create SSL context
+    $context = stream_context_create([
+        'ssl' => [
+            'verify_peer' => false,
+            'verify_peer_name' => false,
+            'allow_self_signed' => true
+        ]
+    ]);
+
+    // Open HTTPS socket connection
+    $socket = @stream_socket_client('ssl://api.fonnte.com:443', $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $context);
 
     if (!$socket) {
-        error_log("FONNTE ERROR: Socket connection failed - {$errno}: {$errstr}");
-        return false;
+        error_log("FONNTE ERROR: HTTPS Socket connection failed - {$errno}: {$errstr}");
+
+        // Fallback: Try file_get_contents with better error handling
+        return fallbackHttpRequest($cleanPhone, $message, $token);
     }
 
     // Send request
@@ -503,12 +483,12 @@ function sendWhatsAppMessage($phone, $message)
     }
     fclose($socket);
 
-    error_log("FONNTE SEND - Raw response: " . substr($response, 0, 500));
+    error_log("FONNTE SEND - HTTPS response received");
 
     // Parse response
     $parts = explode("\r\n\r\n", $response, 2);
     if (count($parts) < 2) {
-        error_log("FONNTE ERROR: Invalid response format");
+        error_log("FONNTE ERROR: Invalid HTTPS response format");
         return false;
     }
 
@@ -517,11 +497,54 @@ function sendWhatsAppMessage($phone, $message)
 
     if (json_last_error() !== JSON_ERROR_NONE) {
         error_log("FONNTE ERROR: JSON decode failed - " . json_last_error_msg());
-        error_log("FONNTE ERROR: Raw body was: " . $body);
         return false;
     }
 
-    error_log("FONNTE Socket result: " . json_encode($result));
+    error_log("FONNTE HTTPS result: " . json_encode($result));
+
+    return isset($result['status']) && $result['status'] === true ? $result : false;
+}
+
+/**
+ * Fallback HTTP request method
+ */
+function fallbackHttpRequest($phone, $message, $token)
+{
+    error_log("FONNTE FALLBACK - Using file_get_contents");
+
+    $postData = http_build_query([
+        'target' => $phone,
+        'message' => $message
+    ]);
+
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'POST',
+            'header' => "Content-Type: application/x-www-form-urlencoded\r\n" .
+                "Authorization: {$token}\r\n",
+            'content' => $postData,
+            'timeout' => 30,
+            'ignore_errors' => true
+        ],
+        'ssl' => [
+            'verify_peer' => false,
+            'verify_peer_name' => false
+        ]
+    ]);
+
+    $response = @file_get_contents('https://api.fonnte.com/send', false, $context);
+
+    if ($response === false) {
+        error_log("FONNTE FALLBACK: file_get_contents failed");
+        $error = error_get_last();
+        if ($error) {
+            error_log("FONNTE FALLBACK ERROR: " . $error['message']);
+        }
+        return false;
+    }
+
+    $result = json_decode($response, true);
+    error_log("FONNTE FALLBACK result: " . json_encode($result));
 
     return isset($result['status']) && $result['status'] === true ? $result : false;
 }
