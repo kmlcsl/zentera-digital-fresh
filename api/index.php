@@ -133,7 +133,7 @@ function handleWhatsAppWebhook()
                 'REQUEST_URI' => $_SERVER['REQUEST_URI'],
                 'HTTP_USER_AGENT' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
                 'REMOTE_ADDR' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
-            ]));
+            ], JSON_PRETTY_PRINT));
             error_log("==============================");
 
             // Validate JSON data
@@ -392,12 +392,12 @@ function sendWhatsAppMessage($phone, $message)
         'countryCode' => '62'
     ];
 
-    error_log("Sending WhatsApp message:", [
+    error_log("Sending WhatsApp message: " . json_encode([
         'original_phone' => $phone,
         'clean_phone' => $cleanPhone,
         'message_length' => strlen($message),
         'data' => $data
-    ]);
+    ]));
 
     // Use stream context instead of cURL for Vercel compatibility
     $postData = http_build_query($data);
@@ -430,11 +430,11 @@ function sendWhatsAppMessage($phone, $message)
             }
         }
 
-        error_log("FONNTE API Response:", [
+        error_log("FONNTE API Response: " . json_encode([
             'http_code' => $http_code,
             'response' => $response,
             'headers' => $http_response_header ?? []
-        ]);
+        ]));
 
         if ($response === false) {
             error_log("WhatsApp send failed: Unable to connect to FONNTE API");
