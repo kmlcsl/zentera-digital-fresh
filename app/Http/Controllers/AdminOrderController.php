@@ -4,12 +4,22 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use App\Models\DocumentOrder;
+use App\Services\WhatsAppService;
 
 class AdminOrderController extends Controller
 {
+    protected $whatsappService;
+
+    public function __construct(WhatsAppService $whatsappService)
+    {
+        $this->whatsappService = $whatsappService;
+    }
+
     /**
      * Display orders list
      */
@@ -382,5 +392,138 @@ class AdminOrderController extends Controller
         ];
 
         return $services[$serviceType] ?? 'Unknown Service';
+    }
+
+
+    /**
+     * Send payment confirmation notification
+     */
+    public function notifyPayment($id)
+    {
+        try {
+            $order = DocumentOrder::findOrFail($id);
+
+            // Update status to paid if not already
+            if ($order->payment_status === 'pending') {
+                $order->update([
+                    'payment_status' => 'paid',
+                    'paid_at' => now()
+                ]);
+            }
+
+            $result = $this->whatsappService->sendPaymentConfirmation($order);
+
+            Log::info('Payment notification sent from admin', [
+                'order_id' => $id,
+                'order_number' => $order->order_number,
+                'success' => $result,
+                'admin_id' => Auth::id()
+            ]);
+
+            if ($result) {
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Notifikasi pembayaran berhasil dikirim'
+                ]);
+            } else {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Gagal mengirim notifikasi pembayaran'
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error sending payment notification: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Terjadi kesalahan sistem'
+            ]);
+        }
+    }
+
+    /**
+     * Send completion notification
+     */
+    public function notifyCompletion(Request $request, $id)
+    {
+        try {
+            $order = DocumentOrder::findOrFail($id);
+
+            // Update status to completed
+            $order->update(['payment_status' => 'completed']);
+
+            $downloadLink = $request->get('download_link');
+            $result = $this->whatsappService->sendCompletionMessage($order, $downloadLink);
+
+            Log::info('Completion notification sent from admin', [
+                'order_id' => $id,
+                'order_number' => $order->order_number,
+                'download_link' => $downloadLink,
+                'success' => $result,
+                'admin_id' => Auth::id()
+            ]);
+
+            if ($result) {
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Notifikasi penyelesaian berhasil dikirim'
+                ]);
+            } else {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Gagal mengirim notifikasi penyelesaian'
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error sending completion notification: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Terjadi kesalahan sistem'
+            ]);
+        }
+    }
+
+    /**
+     * Send custom WhatsApp message
+     */
+    public function sendWhatsApp(Request $request, $id)
+    {
+        try {
+            $request->validate([
+                'message' => 'required|string|max:1000'
+            ]);
+
+            $order = DocumentOrder::findOrFail($id);
+
+            $result = $this->whatsappService->sendMessage(
+                $order->customer_phone,
+                $request->message
+            );
+
+            Log::info('Custom WhatsApp message sent from admin', [
+                'order_id' => $id,
+                'order_number' => $order->order_number,
+                'message' => $request->message,
+                'success' => $result,
+                'admin_id' => Auth::id()
+            ]);
+
+            if ($result) {
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Pesan WhatsApp berhasil dikirim'
+                ]);
+            } else {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Gagal mengirim pesan WhatsApp'
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error sending custom WhatsApp message: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ]);
+        }
     }
 }

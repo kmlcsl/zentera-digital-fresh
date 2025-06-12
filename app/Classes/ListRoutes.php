@@ -101,6 +101,72 @@ class ListRoutes
                         'middleware' => '',
                     ]
                 ]
+            ],
+            [
+                'title' => 'WhatsApp Testing Routes',
+                'item' => [
+                    [
+                        'type' => 'testing',
+                        'method' => 'get',
+                        'url' => '/test-wa',
+                        'controller' => 'App\Http\Controllers\TestController@testWhatsApp',
+                        'name' => 'test.whatsapp',
+                        'middleware' => '',
+                    ],
+                    [
+                        'type' => 'testing',
+                        'method' => 'get',
+                        'url' => '/test-wa-order',
+                        'controller' => 'App\Http\Controllers\TestController@testWhatsAppOrder',
+                        'name' => 'test.whatsapp.order',
+                        'middleware' => '',
+                    ],
+                    [
+                        'type' => 'testing',
+                        'method' => 'get',
+                        'url' => '/test-wa-payment',
+                        'controller' => 'App\Http\Controllers\TestController@testWhatsAppPayment',
+                        'name' => 'test.whatsapp.payment',
+                        'middleware' => '',
+                    ],
+                    [
+                        'type' => 'testing',
+                        'method' => 'get',
+                        'url' => '/test-wa-completion',
+                        'controller' => 'App\Http\Controllers\TestController@testWhatsAppCompletion',
+                        'name' => 'test.whatsapp.completion',
+                        'middleware' => '',
+                    ]
+                ]
+            ],
+            [
+                'title' => 'WhatsApp Webhook Routes',
+                'item' => [
+                    [
+                        'type' => 'webhook',
+                        'method' => 'post',
+                        'url' => '/webhook/whatsapp',
+                        'controller' => 'App\Http\Controllers\WhatsAppWebhookController@handleIncoming',
+                        'name' => 'webhook.whatsapp.post',
+                        'middleware' => '',
+                    ],
+                    [
+                        'type' => 'webhook',
+                        'method' => 'get',
+                        'url' => '/webhook/whatsapp',
+                        'controller' => 'App\Http\Controllers\WhatsAppWebhookController@handleIncoming',
+                        'name' => 'webhook.whatsapp.get',
+                        'middleware' => '',
+                    ],
+                    [
+                        'type' => 'webhook',
+                        'method' => 'get',
+                        'url' => '/webhook/whatsapp/test',
+                        'controller' => 'App\Http\Controllers\WhatsAppWebhookController@testWebhook',
+                        'name' => 'webhook.whatsapp.test',
+                        'middleware' => '',
+                    ]
+                ]
             ]
         ];
 
@@ -306,6 +372,30 @@ class ListRoutes
                         'controller' => 'App\Http\Controllers\AdminOrderController@destroy',
                         'name' => 'admin.orders.destroy',
                         'middleware' => '',
+                    ],
+                    [
+                        'type' => 'orders',
+                        'method' => 'post',
+                        'url' => '/admin/orders/{id}/notify-payment',
+                        'controller' => 'App\Http\Controllers\AdminOrderController@notifyPayment',
+                        'name' => 'admin.orders.notify.payment',
+                        'middleware' => '',
+                    ],
+                    [
+                        'type' => 'orders',
+                        'method' => 'post',
+                        'url' => '/admin/orders/{id}/notify-completion',
+                        'controller' => 'App\Http\Controllers\AdminOrderController@notifyCompletion',
+                        'name' => 'admin.orders.notify.completion',
+                        'middleware' => '',
+                    ],
+                    [
+                        'type' => 'orders',
+                        'method' => 'post',
+                        'url' => '/admin/orders/{id}/send-whatsapp',
+                        'controller' => 'App\Http\Controllers\AdminOrderController@sendWhatsApp',
+                        'name' => 'admin.orders.send.whatsapp',
+                        'middleware' => '',
                     ]
                 ]
             ],
@@ -345,6 +435,51 @@ class ListRoutes
                         'middleware' => '',
                     ]
                 ]
+            ],
+            [
+                'title' => 'WhatsApp Management',
+                'item' => [
+                    [
+                        'type' => 'whatsapp',
+                        'method' => 'get',
+                        'url' => '/admin/whatsapp',
+                        'controller' => 'App\Http\Controllers\AdminWhatsAppController@index',
+                        'name' => 'admin.whatsapp.index',
+                        'middleware' => '',
+                    ],
+                    [
+                        'type' => 'whatsapp',
+                        'method' => 'post',
+                        'url' => '/admin/whatsapp/test',
+                        'controller' => 'App\Http\Controllers\AdminWhatsAppController@test',
+                        'name' => 'admin.whatsapp.test',
+                        'middleware' => '',
+                    ],
+                    [
+                        'type' => 'whatsapp',
+                        'method' => 'post',
+                        'url' => '/admin/whatsapp/broadcast',
+                        'controller' => 'App\Http\Controllers\AdminWhatsAppController@broadcast',
+                        'name' => 'admin.whatsapp.broadcast',
+                        'middleware' => '',
+                    ],
+                    [
+                        'type' => 'whatsapp',
+                        'method' => 'get',
+                        'url' => '/admin/whatsapp/templates',
+                        'controller' => 'App\Http\Controllers\AdminWhatsAppController@templates',
+                        'name' => 'admin.whatsapp.templates',
+                        'middleware' => '',
+                    ],
+                    [
+                        'type' => 'whatsapp',
+                        'method' => 'post',
+                        'url' => '/admin/whatsapp/templates',
+                        'controller' => 'App\Http\Controllers\AdminWhatsAppController@saveTemplate',
+                        'name' => 'admin.whatsapp.templates.save',
+                        'middleware' => '',
+                    ]
+                ]
             ]
         ];
 
@@ -356,7 +491,7 @@ class ListRoutes
 
     function getIgnoreType($type = null)
     {
-        $data = ['/', 'form', 'ajax', 'system'];
+        $data = ['/', 'form', 'ajax', 'system', 'testing', 'webhook'];
         if (!empty($type)) {
             if (!in_array($type, $data)) {
                 return 1;

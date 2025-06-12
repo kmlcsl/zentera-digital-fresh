@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 
 class DocumentOrder extends Model
@@ -86,5 +87,28 @@ class DocumentOrder extends Model
         ];
 
         return $colors[$this->service_type] ?? 'from-gray-500 to-gray-600';
+    }
+
+    protected function customerPhone(): Attribute
+    {
+        return Attribute::make(
+            set: fn($value) => $this->formatPhoneNumber($value),
+        );
+    }
+
+    private function formatPhoneNumber($phone)
+    {
+        $phone = preg_replace('/[^0-9]/', '', $phone);
+
+        // Format khusus Indonesia
+        if (preg_match('/^0/', $phone)) {
+            return preg_replace('/^0/', '62', $phone);
+        }
+
+        if (!preg_match('/^62/', $phone)) {
+            return '62' . $phone;
+        }
+
+        return $phone;
     }
 }

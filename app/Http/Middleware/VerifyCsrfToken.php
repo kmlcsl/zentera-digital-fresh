@@ -12,14 +12,9 @@ class VerifyCsrfToken extends Middleware
      * @var array<int, string>
      */
     protected $except = [
-        // Exclude API routes dari CSRF
-        'api/*',
-
-        // Exclude webhook routes
-        'webhook/*',
-
-        // Exclude payment callback (jika ada)
-        'payment/callback/*',
+        'webhook/*',           // Exclude all webhook routes
+        'webhook/whatsapp',    // Specific webhook route
+        'api/*',              // API routes if any
 
         // Jangan exclude form upload - biarkan CSRF aktif untuk keamanan
         // 'documents/*',

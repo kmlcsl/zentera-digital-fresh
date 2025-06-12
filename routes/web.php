@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\DocumentUploadController;
 use App\Classes\ListRoutes;
 
 // Public Routes
@@ -63,3 +64,17 @@ foreach ($adminRoutes as $key_list => $value_list) {
 Route::get('/login', fn() => redirect('/admin/login'))->name('login');
 Route::get('/admin', fn() => redirect('/admin/dashboard'));
 Route::fallback(fn() => redirect('/'));
+
+Route::get('/test-wa', function () {
+    $controller = new \App\Http\Controllers\DocumentUploadController();
+
+    $result = $controller->sendWhatsAppMessage(
+        '6281330053572', // Nomor Zentera Digital
+        'Tes integrasi FONNTE API berhasil!'
+    );
+
+    return response()->json([
+        'status' => $result ? 'success' : 'error',
+        'message' => $result ? 'Pesan terkirim' : 'Gagal mengirim'
+    ]);
+});

@@ -5,11 +5,25 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Product;
 use App\Models\DocumentOrder;
+use App\Services\WhatsAppService;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 
 class DocumentUploadController extends Controller
 {
+    // Remove constructor dependency, use helper method instead
+
+    protected function whatsapp()
+    {
+        try {
+            return app(WhatsAppService::class);
+        } catch (\Exception $e) {
+            // Fallback to manual instantiation if service not registered
+            return new WhatsAppService();
+        }
+    }
+
     public function repairForm()
     {
         try {
@@ -60,7 +74,6 @@ class DocumentUploadController extends Controller
             }
 
             if (!$product) {
-                // Fallback untuk debugging
                 Log::warning('Product not found, creating fallback');
                 $product = (object) [
                     'name' => 'Cek Plagiarisme Turnitin',
@@ -90,26 +103,18 @@ class DocumentUploadController extends Controller
                 'notes' => 'nullable|string'
             ]);
 
-            // Get product info
             $product = Product::where('name', 'Perbaikan Dokumen')->first();
 
             if (!$product) {
                 return back()->with('error', 'Layanan tidak tersedia');
             }
 
-            // Store uploaded file - FIXED for Vercel
             $file = $request->file('document');
             $filename = time() . '_' . $file->getClientOriginalName();
-
-            // Use tmp directory instead of storage/app/public
             $tempPath = sys_get_temp_dir() . '/' . $filename;
             $file->move(sys_get_temp_dir(), $filename);
-
-            // For production, you might want to upload to cloud storage
-            // For now, we'll just store the filename
             $path = 'documents/repair/' . $filename;
 
-            // Create order
             $order = DocumentOrder::create([
                 'order_number' => DocumentOrder::generateOrderNumber(),
                 'customer_name' => $request->name,
@@ -124,7 +129,14 @@ class DocumentUploadController extends Controller
 
             Log::info('Order created successfully: ' . $order->order_number);
 
-            // Redirect to payment page
+            // Send WhatsApp notification using helper method
+            try {
+                $this->whatsapp()->sendOrderConfirmation($order);
+            } catch (\Exception $e) {
+                Log::error('Failed to send WhatsApp notification: ' . $e->getMessage());
+                // Continue without failing
+            }
+
             return redirect()->route('payment.show', $order->order_number);
         } catch (\Exception $e) {
             Log::error('Repair submit error: ' . $e->getMessage());
@@ -150,11 +162,8 @@ class DocumentUploadController extends Controller
 
             $file = $request->file('document');
             $filename = time() . '_' . $file->getClientOriginalName();
-
-            // Use tmp directory
             $tempPath = sys_get_temp_dir() . '/' . $filename;
             $file->move(sys_get_temp_dir(), $filename);
-
             $path = 'documents/format/' . $filename;
 
             $order = DocumentOrder::create([
@@ -168,6 +177,13 @@ class DocumentUploadController extends Controller
                 'notes' => $request->notes,
                 'payment_status' => 'pending'
             ]);
+
+            // Send WhatsApp notification
+            try {
+                $this->whatsapp()->sendOrderConfirmation($order);
+            } catch (\Exception $e) {
+                Log::error('Failed to send WhatsApp notification: ' . $e->getMessage());
+            }
 
             return redirect()->route('payment.show', $order->order_number);
         } catch (\Exception $e) {
@@ -189,7 +205,6 @@ class DocumentUploadController extends Controller
             $product = Product::where('name', 'Cek Plagiarisme Turnitin')->first();
 
             if (!$product) {
-                // Fallback price if product not found
                 $defaultPrice = 25000;
                 Log::warning('Product not found, using default price: ' . $defaultPrice);
             } else {
@@ -198,11 +213,8 @@ class DocumentUploadController extends Controller
 
             $file = $request->file('document');
             $filename = time() . '_' . $file->getClientOriginalName();
-
-            // Use tmp directory for Vercel compatibility
             $tempPath = sys_get_temp_dir() . '/' . $filename;
             $file->move(sys_get_temp_dir(), $filename);
-
             $path = 'documents/plagiarism/' . $filename;
 
             $order = DocumentOrder::create([
@@ -219,11 +231,56 @@ class DocumentUploadController extends Controller
 
             Log::info('Plagiarism order created: ' . $order->order_number);
 
+            // Send WhatsApp notification - khusus plagiarism
+            try {
+                $message = "Baik, mohon ditunggu yaa dalam proses pengecekkan\n\n" .
+                    "🔍 Detail Pesanan:\n" .
+                    "No. Order: #{$order->order_number}\n" .
+                    "Layanan: {$order->service_name}\n" .
+                    "Harga: {$order->formatted_price}\n\n" .
+                    "Kami akan mengirimkan hasilnya via WhatsApp dalam 1 hari kerja setelah pembayaran dikonfirmasi.\n\n" .
+                    "Terima kasih! 🙏";
+
+                $this->sendWhatsAppMessage($order->customer_phone, $message);
+            } catch (\Exception $e) {
+                Log::error('Failed to send WhatsApp notification: ' . $e->getMessage());
+            }
+
             return redirect()->route('payment.show', $order->order_number);
         } catch (\Exception $e) {
             Log::error('Plagiarism submit error: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());
             return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
+        }
+    }
+
+    // Keep existing method for compatibility
+    public function sendWhatsAppMessage($phone, $message)
+    {
+        $token = config('services.fonnte.token');
+        $url = 'https://api.fonnte.com/send';
+
+        $phone = preg_replace('/^0/', '62', $phone);
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => $token
+            ])->post($url, [
+                'target' => $phone,
+                'message' => $message,
+                'delay' => '2-5',
+                'countryCode' => '62',
+            ]);
+
+            Log::info('FONNTE Response:', [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            return $response->successful();
+        } catch (\Exception $e) {
+            Log::error("FONNTE API Error: " . $e->getMessage());
+            return false;
         }
     }
 }

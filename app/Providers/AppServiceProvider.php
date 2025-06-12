@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use App\Services\WhatsAppService;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Schema;
 
@@ -13,7 +14,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Register WhatsApp Service
+        $this->app->singleton(WhatsAppService::class, function ($app) {
+            return new WhatsAppService();
+        });
+
+        // Alternative binding
+        $this->app->bind('whatsapp', WhatsAppService::class);
     }
 
     /**
