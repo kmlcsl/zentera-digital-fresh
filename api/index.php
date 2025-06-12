@@ -22,6 +22,12 @@ if (strpos($requestUri, '/api/webhook/whatsapp') !== false) {
     exit;
 }
 
+// Handle webhook status dari FONNTE
+if (strpos($requestUri, '/webhook/status') !== false) {
+    handleWebhookStatus();
+    exit;
+}
+
 // Default Laravel request handling
 $kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
 
@@ -31,6 +37,30 @@ $response = $kernel->handle($request);
 $response->send();
 
 $kernel->terminate($request, $response);
+
+/**
+ * Handle webhook status dari FONNTE
+ */
+function handleWebhookStatus()
+{
+    header('Content-Type: application/json');
+
+    try {
+        $rawInput = file_get_contents('php://input');
+        $data = json_decode($rawInput, true);
+
+        error_log('Webhook Status: ' . json_encode($data));
+
+        // Respond dengan status OK untuk webhook status
+        echo json_encode([
+            'status' => 'ok',
+            'message' => 'Status received'
+        ]);
+    } catch (\Exception $e) {
+        error_log('Webhook Status Error: ' . $e->getMessage());
+        echo json_encode(['status' => 'error']);
+    }
+}
 
 /**
  * Handle WhatsApp webhook secara langsung
@@ -70,13 +100,23 @@ function handleWhatsAppWebhook()
             $rawInput = file_get_contents('php://input');
             $data = json_decode($rawInput, true);
 
-            // Enhanced logging
-            error_log('WhatsApp Webhook Data: ' . json_encode([
-                'raw_input' => $rawInput,
-                'parsed_data' => $data,
-                'headers' => getallheaders(),
-                'server' => $_SERVER
-            ]));
+            // Validate JSON data
+            if (!$data) {
+                error_log('Invalid JSON data received: ' . $rawInput);
+                http_response_code(400);
+                echo json_encode([
+                    'status' => 'invalid_json',
+                    'raw_input' => substr($rawInput, 0, 200)
+                ]);
+                return;
+            }
+
+            // Handle webhook status messages (different from chat messages)
+            if (isset($data['state'])) {
+                error_log('Webhook status message received: ' . json_encode($data));
+                echo json_encode(['status' => 'ok', 'message' => 'Status received']);
+                return;
+            }
 
             // Validate webhook data
             $message = null;
@@ -284,7 +324,7 @@ function handleGeneralMessage($phone, $message)
 }
 
 /**
- * Send WhatsApp message using FONNTE API
+ * Send WhatsApp message using FONNTE API (Vercel compatible)
  */
 function sendWhatsAppMessage($phone, $message)
 {
@@ -296,31 +336,36 @@ function sendWhatsAppMessage($phone, $message)
         'countryCode' => '62'
     ];
 
-    $curl = curl_init();
-    curl_setopt_array($curl, [
-        CURLOPT_URL => 'https://api.fonnte.com/send',
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_ENCODING => '',
-        CURLOPT_MAXREDIRS => 10,
-        CURLOPT_TIMEOUT => 0,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-        CURLOPT_CUSTOMREQUEST => 'POST',
-        CURLOPT_POSTFIELDS => http_build_query($data),
-        CURLOPT_HTTPHEADER => [
-            'Authorization: ' . $token
-        ],
+    // Use stream context instead of cURL for Vercel compatibility
+    $postData = http_build_query($data);
+
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'POST',
+            'header' => [
+                'Content-Type: application/x-www-form-urlencoded',
+                'Authorization: ' . $token,
+                'Content-Length: ' . strlen($postData)
+            ],
+            'content' => $postData,
+            'timeout' => 30
+        ]
     ]);
 
-    $response = curl_exec($curl);
-    $err = curl_error($curl);
-    curl_close($curl);
+    try {
+        $response = file_get_contents('https://api.fonnte.com/send', false, $context);
 
-    if ($err) {
-        error_log("WhatsApp send error: " . $err);
-        return false;
-    } else {
+        if ($response === false) {
+            error_log("WhatsApp send failed: Unable to connect");
+            return false;
+        }
+
         error_log("WhatsApp send response: " . $response);
-        return json_decode($response, true);
+        $result = json_decode($response, true);
+
+        return $result;
+    } catch (\Exception $e) {
+        error_log("WhatsApp send error: " . $e->getMessage());
+        return false;
     }
 }
