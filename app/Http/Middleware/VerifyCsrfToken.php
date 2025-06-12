@@ -14,10 +14,11 @@ class VerifyCsrfToken extends Middleware
     protected $except = [
         // Webhook routes
         'webhook/*',
-        'webhook/whatsapp',
         '/webhook/whatsapp',
-        'https://www.zenteradigital.my.id/webhook/whatsapp',
-        'https://zenteradigital.my.id/webhook/whatsapp',
+        'webhook/whatsapp',
+        'api/webhook/*',
+        'https://www.zenteradigital.my.id/api/webhook/whatsapp',
+        'https://zenteradigital.my.id/api/webhook/whatsapp',
 
         // API routes
         'api/*',
