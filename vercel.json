@@ -21,6 +21,7 @@
     "env": {
         "APP_ENV": "production",
         "APP_DEBUG": "true",
+        "APP_KEY": "base64:CAzBvTfA4AhzX7/5UwXsDD8FvWwdvdQIa4CQO9hfX4w=",
         "LOG_CHANNEL": "stderr",
         "LOG_LEVEL": "error",
         "VIEW_COMPILED_PATH": "/tmp",
@@ -30,6 +31,8 @@
         "APP_ROUTES_CACHE": "/tmp/routes.php",
         "APP_EVENTS_CACHE": "/tmp/events.php",
         "CACHE_DRIVER": "array",
-        "SESSION_DRIVER": "cookie"
+        "SESSION_DRIVER": "cookie",
+        "FILESYSTEM_DISK": "public",
+        "UPLOAD_PATH": "/tmp/uploads"
     }
 }

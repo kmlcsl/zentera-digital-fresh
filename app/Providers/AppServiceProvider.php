@@ -24,6 +24,20 @@ class AppServiceProvider extends ServiceProvider
         // Force HTTPS for Vercel/production
         if (config('app.env') === 'production') {
             URL::forceScheme('https');
+
+            // Ensure upload directories exist in production
+            $uploadDirs = [
+                '/tmp/uploads',
+                '/tmp/uploads/documents',
+                '/tmp/uploads/payment_proofs',
+                '/tmp/cache'
+            ];
+
+            foreach ($uploadDirs as $dir) {
+                if (!is_dir($dir)) {
+                    mkdir($dir, 0755, true);
+                }
+            }
         }
 
         // Set default string length for older MySQL versions
