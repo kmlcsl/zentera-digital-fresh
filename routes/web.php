@@ -120,64 +120,39 @@ Route::prefix('admin')->name('admin.')->group(function () {
 });
 
 // Storage access route for Vercel (karena tidak ada symlink)
-Route::get('/storage/{path}', function ($path) {
-    $filePath = storage_path('app/public/' . $path);
+// Route::get('/storage/{path}', function ($path) {
+//     $filePath = storage_path('app/public/' . $path);
 
-    if (!file_exists($filePath)) {
-        abort(404);
-    }
+//     if (!file_exists($filePath)) {
+//         abort(404);
+//     }
 
-    $mimeType = mime_content_type($filePath);
+//     $mimeType = mime_content_type($filePath);
 
-    return response()->file($filePath, [
-        'Content-Type' => $mimeType,
-        'Cache-Control' => 'public, max-age=31536000',
-    ]);
-})->where('path', '.*');
-
-// Tambahkan route debug di web.php (HAPUS SETELAH TEST)
-Route::get('/debug-files', function () {
-    $publicPath = public_path();
-    $paymentsPath = public_path('payments');
-
-    $result = [
-        'public_path' => $publicPath,
-        'public_exists' => is_dir($publicPath),
-        'payments_path' => $paymentsPath,
-        'payments_exists' => is_dir($paymentsPath),
-        'payment_files' => [],
-        'vercel_structure' => [],
-    ];
-
-    // List payment files
-    if (is_dir($paymentsPath)) {
-        $result['payment_files'] = array_diff(scandir($paymentsPath), ['.', '..']);
-    }
-
-    // Check Vercel structure
-    $basePath = base_path();
-    $result['base_path'] = $basePath;
-    $result['vercel_structure'] = [
-        'api_exists' => is_dir($basePath . '/api'),
-        'public_exists' => is_dir($basePath . '/public'),
-        'public_payments_exists' => is_dir($basePath . '/public/payments'),
-    ];
-
-    // Test specific files
-    $testFiles = ['dana.png', 'bca.png', 'mandiri.png', 'ovo.png'];
-    foreach ($testFiles as $file) {
-        $filePath = public_path("payments/{$file}");
-        $result['test_files'][$file] = [
-            'path' => $filePath,
-            'exists' => file_exists($filePath),
-            'size' => file_exists($filePath) ? filesize($filePath) : 0,
-        ];
-    }
-
-    return response()->json($result, 200, [], JSON_PRETTY_PRINT);
-});
+//     return response()->file($filePath, [
+//         'Content-Type' => $mimeType,
+//         'Cache-Control' => 'public, max-age=31536000',
+//     ]);
+// })->where('path', '.*');
 
 // Fallback route for 404
 Route::fallback(function () {
     return redirect()->route('home');
+});
+
+
+// Tambahkan temporary di web.php
+Route::get('/debug-files', function () {
+    $files = [
+        'AdminLoginController' => file_exists(app_path('Http/Controllers/Admin/AdminLoginController.php')),
+        'DashboardController' => file_exists(app_path('Http/Controllers/Admin/DashboardController.php')),
+        'SettingController' => file_exists(app_path('Http/Controllers/Admin/SettingController.php')),
+    ];
+
+    return response()->json([
+        'app_path' => app_path(),
+        'files' => $files,
+        'directory_contents' => is_dir(app_path('Http/Controllers/Admin')) ?
+            scandir(app_path('Http/Controllers/Admin')) : 'Directory not found'
+    ]);
 });
