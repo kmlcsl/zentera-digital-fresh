@@ -128,6 +128,10 @@ Route::post('/admin/login', function (Request $request) {
     // Login logic
 })->name('admin.login.submit');
 
+Route::get('/admin/dashboard', function () {
+    // Dashboard logic
+})->name('admin.dashboard');
+
 // Fallback route for 404
 Route::fallback(function () {
     return redirect()->route('home');
