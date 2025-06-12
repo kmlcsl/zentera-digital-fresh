@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\DocumentUploadController;
 use App\Classes\ListRoutes;
 
@@ -65,27 +66,53 @@ Route::get('/login', fn() => redirect('/admin/login'))->name('login');
 Route::get('/admin', fn() => redirect('/admin/dashboard'));
 Route::fallback(fn() => redirect('/'));
 
-Route::get('/test-wa', function () {
-    $controller = new \App\Http\Controllers\DocumentUploadController();
+// WhatsApp Webhook Routes - CLEAN VERSION
+Route::match(['get', 'post'], '/webhook/whatsapp', function (Illuminate\Http\Request $request) {
+    try {
+        // Handle GET request (verification)
+        if ($request->isMethod('GET')) {
+            return response()->json([
+                'status' => 'webhook_active',
+                'message' => 'WhatsApp webhook is ready',
+                'timestamp' => now()->toDateTimeString(),
+                'server' => 'Zentera Digital'
+            ]);
+        }
 
-    $result = $controller->sendWhatsAppMessage(
-        '6281330053572', // Nomor Zentera Digital
-        'Tes integrasi FONNTE API berhasil!'
-    );
+        // Handle POST request (actual webhook)
+        $controller = new App\Http\Controllers\WhatsAppWebhookController();
+        return $controller->handleIncoming($request);
+    } catch (\Exception $e) {
+        Log::error('Webhook route error: ' . $e->getMessage());
+        return response()->json([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+})->name('webhook.whatsapp')
+    ->withoutMiddleware([
+        \App\Http\Middleware\VerifyCsrfToken::class,
+        'throttle'
+    ]);
 
+// Test route
+Route::get('/webhook/whatsapp/test', function (Illuminate\Http\Request $request) {
+    try {
+        $controller = new App\Http\Controllers\WhatsAppWebhookController();
+        return $controller->testWebhook($request);
+    } catch (\Exception $e) {
+        return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
+    }
+})->name('webhook.whatsapp.test');
+
+// Debug route
+Route::get('/webhook-debug', function () {
     return response()->json([
-        'status' => $result ? 'success' : 'error',
-        'message' => $result ? 'Pesan terkirim' : 'Gagal mengirim'
+        'routes' => [
+            'webhook' => url('/webhook/whatsapp'),
+            'test' => url('/webhook/whatsapp/test'),
+        ],
+        'csrf_disabled' => true,
+        'timestamp' => now()
     ]);
 });
-
-// WhatsApp Webhook Routes - tanpa CSRF protection
-Route::post('/webhook/whatsapp', [App\Http\Controllers\WhatsAppWebhookController::class, 'handleIncoming'])
-    ->name('webhook.whatsapp.post')
-    ->withoutMiddleware(['csrf']); // Explicitly exclude CSRF
-
-Route::get('/webhook/whatsapp', [App\Http\Controllers\WhatsAppWebhookController::class, 'handleIncoming'])
-    ->name('webhook.whatsapp.get');
-
-Route::get('/webhook/whatsapp/test', [App\Http\Controllers\WhatsAppWebhookController::class, 'testWebhook'])
-    ->name('webhook.whatsapp.test');
