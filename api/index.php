@@ -22,9 +22,20 @@ if (strpos($requestUri, '/api/webhook/whatsapp') !== false) {
     exit;
 }
 
-// Handle debug FONNTE
-if (strpos($requestUri, '/debug-fonnte') !== false) {
-    debugFonnteComplete();
+// Handle simple test webhook
+if (strpos($requestUri, '/test-webhook') !== false) {
+    header('Content-Type: application/json');
+    error_log("=== TEST WEBHOOK CALLED ===");
+    error_log("Method: " . $_SERVER['REQUEST_METHOD']);
+    error_log("Headers: " . json_encode(getallheaders() ?? []));
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $input = file_get_contents('php://input');
+        error_log("POST Data: " . $input);
+        echo json_encode(['status' => 'webhook_working', 'method' => 'POST', 'data_received' => !empty($input)]);
+    } else {
+        echo json_encode(['status' => 'webhook_working', 'method' => 'GET']);
+    }
     exit;
 }
 
@@ -485,6 +496,58 @@ function handleGeneralMessage($phone, $message)
 }
 
 /**
+ * Alternative approach: Use a proxy or different method
+ */
+function sendWhatsAppViaProxy($phone, $message, $token)
+{
+    error_log("FONNTE PROXY - Trying proxy approach");
+
+    // Method 1: Try via different endpoint if available
+    $endpoints = [
+        'https://api.fonnte.com/send',
+        'https://fonnte.com/api/send' // Alternative endpoint if exists
+    ];
+
+    foreach ($endpoints as $endpoint) {
+        error_log("FONNTE PROXY - Trying endpoint: {$endpoint}");
+
+        $postData = json_encode([
+            'target' => $phone,
+            'message' => $message
+        ]);
+
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'POST',
+                'header' => "Content-Type: application/json\r\n" .
+                    "Authorization: Bearer {$token}\r\n" .
+                    "User-Agent: ZenteraBot/1.0\r\n",
+                'content' => $postData,
+                'timeout' => 30,
+                'ignore_errors' => true
+            ],
+            'ssl' => [
+                'verify_peer' => false,
+                'verify_peer_name' => false
+            ]
+        ]);
+
+        $response = @file_get_contents($endpoint, false, $context);
+
+        if ($response) {
+            $result = json_decode($response, true);
+            error_log("FONNTE PROXY - Endpoint {$endpoint} result: " . json_encode($result));
+
+            if (isset($result['status']) && $result['status'] === true) {
+                return $result;
+            }
+        }
+    }
+
+    return false;
+}
+
+/**
  * Send WhatsApp message using FONNTE API (Fix Unauthorized Issue)
  */
 function sendWhatsAppMessage($phone, $message)
@@ -502,6 +565,12 @@ function sendWhatsAppMessage($phone, $message)
     }
 
     error_log("FONNTE SEND - Phone: {$phone} -> {$cleanPhone}");
+
+    // Since we're getting unauthorized, let's try the proxy approach first
+    $proxyResult = sendWhatsAppViaProxy($cleanPhone, $message, $token);
+    if ($proxyResult) {
+        return $proxyResult;
+    }
 
     // Add proper headers to mimic successful curl request
     $postData = http_build_query([
@@ -561,9 +630,13 @@ function sendWhatsAppMessage($phone, $message)
     }
 
     if (isset($result['reason']) && $result['reason'] === 'unauthorized token usage') {
-        error_log("FONNTE UNAUTHORIZED: Token issue detected");
-        // Try alternative approach
-        return sendWhatsAppAlternative($cleanPhone, $message, $token);
+        error_log("FONNTE UNAUTHORIZED: Token issue detected - IP whitelist problem");
+
+        // Log the current IP being used by Vercel
+        $currentIP = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTTP_X_REAL_IP'] ?? $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        error_log("FONNTE UNAUTHORIZED: Current IP is: {$currentIP}");
+
+        return false;
     }
 
     if (isset($result['status']) && $result['status'] === true) {
@@ -573,49 +646,4 @@ function sendWhatsAppMessage($phone, $message)
         error_log("FONNTE FAILED: " . json_encode($result));
         return false;
     }
-}
-
-/**
- * Alternative FONNTE method untuk bypass unauthorized
- */
-function sendWhatsAppAlternative($phone, $message, $token)
-{
-    error_log("FONNTE ALTERNATIVE - Trying different approach");
-
-    // Method 1: Add delay to avoid rate limiting
-    usleep(500000); // 0.5 second delay
-
-    // Method 2: Use different User-Agent and headers
-    $postData = "target=" . urlencode($phone) . "&message=" . urlencode($message);
-
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'POST',
-            'header' => "Content-Type: application/x-www-form-urlencoded\r\n" .
-                "Authorization: {$token}\r\n" .
-                "User-Agent: curl/7.68.0\r\n" .
-                "Accept: */*\r\n",
-            'content' => $postData,
-            'timeout' => 30,
-            'ignore_errors' => true
-        ],
-        'ssl' => [
-            'verify_peer' => false,
-            'verify_peer_name' => false
-        ]
-    ]);
-
-    $response = @file_get_contents('https://api.fonnte.com/send', false, $context);
-
-    if ($response) {
-        $result = json_decode($response, true);
-        error_log("FONNTE ALTERNATIVE RESULT: " . json_encode($result));
-
-        if (isset($result['status']) && $result['status'] === true) {
-            return $result;
-        }
-    }
-
-    error_log("FONNTE ALTERNATIVE FAILED");
-    return false;
 }
