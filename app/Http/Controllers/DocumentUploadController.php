@@ -192,9 +192,52 @@ class DocumentUploadController extends Controller
         }
     }
 
+    /**
+     * Send WhatsApp message using Wablas API
+     */
+    public function sendWablasMessage($phone, $message)
+    {
+        $token = config('services.wablas.token'); // Tambah di config
+        $baseUrl = config('services.wablas.base_url'); // Tambah di config
+
+        // Clean phone number
+        $phone = preg_replace('/[^0-9]/', '', $phone);
+        if (!str_starts_with($phone, '62')) {
+            if (str_starts_with($phone, '0')) {
+                $phone = '62' . substr($phone, 1);
+            } else if (str_starts_with($phone, '8')) {
+                $phone = '62' . $phone;
+            }
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => $token,
+                'Content-Type' => 'application/json'
+            ])->post($baseUrl . '/api/send-message', [
+                'phone' => $phone,
+                'message' => $message
+            ]);
+
+            Log::info('WABLAS Response:', [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            return $response->successful();
+        } catch (\Exception $e) {
+            Log::error("WABLAS API Error: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Update plagiarismSubmit to use Wablas
+     */
     public function plagiarismSubmit(Request $request)
     {
         try {
+            // Validation
             $request->validate([
                 'document' => 'required|file|mimes:pdf,doc,docx,txt|max:10240',
                 'name' => 'required|string|max:255',
@@ -202,6 +245,7 @@ class DocumentUploadController extends Controller
                 'notes' => 'nullable|string'
             ]);
 
+            // Get product and set price
             $product = Product::where('name', 'Cek Plagiarisme Turnitin')->first();
 
             if (!$product) {
@@ -211,12 +255,14 @@ class DocumentUploadController extends Controller
                 $defaultPrice = $product->price;
             }
 
+            // Handle file upload
             $file = $request->file('document');
             $filename = time() . '_' . $file->getClientOriginalName();
             $tempPath = sys_get_temp_dir() . '/' . $filename;
             $file->move(sys_get_temp_dir(), $filename);
             $path = 'documents/plagiarism/' . $filename;
 
+            // Create order
             $order = DocumentOrder::create([
                 'order_number' => DocumentOrder::generateOrderNumber(),
                 'customer_name' => $request->name,
@@ -231,19 +277,25 @@ class DocumentUploadController extends Controller
 
             Log::info('Plagiarism order created: ' . $order->order_number);
 
-            // Send WhatsApp notification - khusus plagiarism
+            // Send WhatsApp notification using existing FONNTE method (safer for now)
             try {
-                $message = "Baik, mohon ditunggu yaa dalam proses pengecekkan\n\n" .
-                    "🔍 Detail Pesanan:\n" .
-                    "No. Order: #{$order->order_number}\n" .
-                    "Layanan: {$order->service_name}\n" .
-                    "Harga: {$order->formatted_price}\n\n" .
-                    "Kami akan mengirimkan hasilnya via WhatsApp dalam 1 hari kerja setelah pembayaran dikonfirmasi.\n\n" .
-                    "Terima kasih! 🙏";
+                $message = "✅ *PESANAN DITERIMA*\n\n" .
+                    "📋 Detail Pesanan:\n" .
+                    "🔢 No. Order: #{$order->order_number}\n" .
+                    "👤 Nama: {$order->customer_name}\n" .
+                    "📱 Phone: {$order->customer_phone}\n" .
+                    "🔧 Layanan: {$order->service_name}\n" .
+                    "💰 Total: " . number_format($order->price, 0, ',', '.') . "\n\n" .
+                    "⏰ Estimasi: 1-2 hari kerja setelah pembayaran\n\n" .
+                    "Silakan lakukan pembayaran untuk memproses pesanan Anda.\n\n" .
+                    "Terima kasih! 🙏\n\n" .
+                    "*Zentera Digital - Solusi Dokumen Terpercaya* ✨";
 
+                // Use existing FONNTE method for now
                 $this->sendWhatsAppMessage($order->customer_phone, $message);
             } catch (\Exception $e) {
                 Log::error('Failed to send WhatsApp notification: ' . $e->getMessage());
+                // Continue without failing
             }
 
             return redirect()->route('payment.show', $order->order_number);

@@ -35,9 +35,9 @@ return [
         ],
     ],
 
-    'fonnte' => [
-        'token' => env('FONNTE_API_TOKEN'),
-        'url' => 'https://api.fonnte.com/',
+    'wablas' => [
+        'token' => env('WABLAS_TOKEN', ''),
+        'base_url' => env('WABLAS_BASE_URL', ''),
     ],
 
 ];
