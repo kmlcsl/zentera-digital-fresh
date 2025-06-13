@@ -244,10 +244,11 @@ function handleGeneralMessage($phone, $message)
 function sendWablasMessage($phone, $message)
 {
     // =============================================================
-    // WABLAS CONFIGURATION - UPDATED WITH ACTUAL VALUES
+    // WABLAS CONFIGURATION - WITH SECRET KEY
     // =============================================================
     $wablasToken = '7GOkB1jALee81YZIsTtbSFBSWSa8llEL1W4OpiuPQMGkme2ppibzVMT';
     $wablasBaseUrl = 'https://sby.wablas.com';
+    $wablasSecretKey = 'dRyRUO7G';
     // =============================================================
 
     error_log("WABLAS SEND - Phone: {$phone}");
@@ -255,10 +256,11 @@ function sendWablasMessage($phone, $message)
     error_log("WABLAS SEND - Token: " . substr($wablasToken, 0, 10) . "...");
     error_log("WABLAS SEND - Base URL: {$wablasBaseUrl}");
 
-    // Prepare data for Wablas API
+    // Prepare data for Wablas API - with secret key
     $postData = json_encode([
         'phone' => $phone,
-        'message' => $message
+        'message' => $message,
+        'secret' => $wablasSecretKey
     ]);
 
     // Headers for Wablas
