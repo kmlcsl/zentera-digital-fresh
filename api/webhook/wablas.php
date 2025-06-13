@@ -2,7 +2,7 @@
 
 /**
  * Wablas WhatsApp Webhook API for Zentera Digital
- * Deployed on Vercel
+ * COPY YOUR ACTUAL TOKEN AND BASE URL HERE
  */
 
 // CORS headers
@@ -243,12 +243,17 @@ function handleGeneralMessage($phone, $message)
  */
 function sendWablasMessage($phone, $message)
 {
-    // Wablas configuration - UPDATE WITH YOUR ACTUAL VALUES
-    $wablasToken = '7GOkB1jALee81YZIsTtbSFBSWSa8llEL1W4OpiuPQMGkme2ppibzVMT'; // Copy dari dashboard Wablas
-    $wablasBaseUrl = 'https://sby.wablas.com'; // Copy dari dashboard Wablas
+    // =============================================================
+    // WABLAS CONFIGURATION - UPDATED WITH ACTUAL VALUES
+    // =============================================================
+    $wablasToken = '7GOkB1jALee81YZIsTtbSFBSWSa8llEL1W4OpiuPQMGkme2ppibzVMT';
+    $wablasBaseUrl = 'https://sby.wablas.com';
+    // =============================================================
 
     error_log("WABLAS SEND - Phone: {$phone}");
     error_log("WABLAS SEND - Message length: " . strlen($message));
+    error_log("WABLAS SEND - Token: " . substr($wablasToken, 0, 10) . "...");
+    error_log("WABLAS SEND - Base URL: {$wablasBaseUrl}");
 
     // Prepare data for Wablas API
     $postData = json_encode([
