@@ -248,7 +248,7 @@ function sendWablasMessage($phone, $message)
     // =============================================================
     $wablasToken = '7GOkB1jALee81YZIsTtbSFBSWSa8llEL1W4OpiuPQMGkme2ppibzVMT';
     $wablasBaseUrl = 'https://sby.wablas.com';
-    $wablasSecretKey = '4DhgZq5H';
+    $wablasSecretKey = 'FFxhpBHa';
     // =============================================================
 
     error_log("WABLAS SEND - Phone: {$phone}");
