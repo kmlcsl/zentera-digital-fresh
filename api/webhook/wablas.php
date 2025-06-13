@@ -244,11 +244,11 @@ function handleGeneralMessage($phone, $message)
 function sendWablasMessage($phone, $message)
 {
     // =============================================================
-    // WABLAS CONFIGURATION - WITH SECRET KEY
+    // WABLAS CONFIGURATION - LATEST SECRET KEY
     // =============================================================
     $wablasToken = '7GOkB1jALee81YZIsTtbSFBSWSa8llEL1W4OpiuPQMGkme2ppibzVMT';
     $wablasBaseUrl = 'https://sby.wablas.com';
-    $wablasSecretKey = 'FFxhpBHa';
+    $wablasSecretKey = 'FFxhpBHa'; // LATEST - updated secret key
     // =============================================================
 
     error_log("WABLAS SEND - Phone: {$phone}");
