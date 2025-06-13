@@ -243,9 +243,9 @@ function handleGeneralMessage($phone, $message)
  */
 function sendWablasMessage($phone, $message)
 {
-    // Wablas configuration - UPDATE THESE VALUES
-    $wablasToken = '7GOkB1jALee81YZIsTtbSFBSWSa8llEL1W4OpiuPQMGkme2ppibzVMT'; // Copy dari "API Keys / Token"
-    $wablasBaseUrl = 'https://sby.wablas.com'; // Copy dari "Domain / Base URL"
+    // Wablas configuration - UPDATE WITH YOUR ACTUAL VALUES
+    $wablasToken = 'PASTE_YOUR_ACTUAL_WABLAS_TOKEN_HERE'; // Copy dari dashboard Wablas
+    $wablasBaseUrl = 'PASTE_YOUR_ACTUAL_WABLAS_BASE_URL_HERE'; // Copy dari dashboard Wablas
 
     error_log("WABLAS SEND - Phone: {$phone}");
     error_log("WABLAS SEND - Message length: " . strlen($message));
