@@ -373,6 +373,23 @@ class ListRoutes
                         'name' => 'admin.orders.destroy',
                         'middleware' => '',
                     ],
+                    // ✅ TAMBAHAN ROUTES UNTUK AJAX ENDPOINTS
+                    [
+                        'type' => 'orders',
+                        'method' => 'get',
+                        'url' => '/admin/orders/{id}/details',
+                        'controller' => 'App\Http\Controllers\AdminOrderController@getOrderDetails',
+                        'name' => 'admin.orders.details',
+                        'middleware' => '',
+                    ],
+                    [
+                        'type' => 'orders',
+                        'method' => 'post',
+                        'url' => '/admin/orders/{id}/update-payment-status',
+                        'controller' => 'App\Http\Controllers\AdminOrderController@updatePaymentStatus',
+                        'name' => 'admin.orders.update-payment-status',
+                        'middleware' => '',
+                    ],
                     [
                         'type' => 'orders',
                         'method' => 'post',

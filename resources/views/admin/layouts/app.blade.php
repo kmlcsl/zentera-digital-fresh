@@ -8,7 +8,7 @@
     <title>@yield('title', 'Admin Panel') - Zentera Digital</title>
 
     <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.16"></script>
 
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -134,7 +134,7 @@
                                     $pendingCount = 0;
                                 }
                             @endphp
-                            @if($pendingCount > 0)
+                            @if ($pendingCount > 0)
                                 <span class="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full">
                                     {{ $pendingCount }}
                                 </span>
@@ -387,13 +387,21 @@
 
             // Auto-hide success/error messages
             setTimeout(function() {
-                const alerts = document.querySelectorAll('.bg-green-100, .bg-red-100');
-                alerts.forEach(function(alert) {
-                    alert.style.transition = 'opacity 0.5s ease-out';
-                    alert.style.opacity = '0';
-                    setTimeout(function() {
-                        alert.remove();
-                    }, 500);
+                // Hanya hapus notification, bukan status badges
+                const notifications = document.querySelectorAll(
+                    '.notification-toast, .fixed.top-4.right-4:not([id^="status-"])');
+
+                notifications.forEach(function(notification) {
+                    // Double check: pastikan bukan status badge
+                    if (!notification.closest('[id^="status-"]') &&
+                        !notification.textContent.includes('Selesai')) {
+
+                        notification.style.transition = 'opacity 0.5s ease-out';
+                        notification.style.opacity = '0';
+                        setTimeout(function() {
+                            notification.remove();
+                        }, 500);
+                    }
                 });
             }, 5000);
 

@@ -8,7 +8,6 @@ use App\Models\DocumentOrder;
 use App\Services\WhatsAppService;
 use App\Services\GoogleDriveService;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 
 class DocumentUploadController extends Controller
@@ -31,19 +30,21 @@ class DocumentUploadController extends Controller
 
     /**
      * Upload file dengan Google Drive + fallback local
+     * FIXED: Kirim serviceType ke GoogleDriveService
      */
     private function uploadFile($file, $serviceType)
     {
         try {
-            // Upload to Google Drive
-            $fileId = $this->googleDriveService->uploadFile($file);
+            // FIXED: Upload to Google Drive dengan serviceType parameter
+            $fileId = $this->googleDriveService->uploadFile($file, $serviceType);
 
             if ($fileId) {
                 $urls = $this->googleDriveService->generateUrls($fileId);
 
                 Log::info('File uploaded to Google Drive', [
                     'file_id' => $fileId,
-                    'service_type' => $serviceType
+                    'service_type' => $serviceType,
+                    'folder_mapping' => $this->getFolderNameForService($serviceType)
                 ]);
 
                 return [
@@ -71,6 +72,11 @@ class DocumentUploadController extends Controller
             $filename = time() . '_' . $file->getClientOriginalName();
             $path = $file->storeAs("documents/{$serviceType}", $filename, 'public');
 
+            Log::info('File uploaded to local storage', [
+                'path' => $path,
+                'service_type' => $serviceType
+            ]);
+
             return [
                 'success' => true,
                 'storage_type' => 'local',
@@ -85,7 +91,8 @@ class DocumentUploadController extends Controller
             ];
         } catch (\Exception $e) {
             Log::error('Both Google Drive and local storage failed', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'service_type' => $serviceType
             ]);
 
             return [
@@ -93,6 +100,22 @@ class DocumentUploadController extends Controller
                 'error' => 'Upload gagal: ' . $e->getMessage()
             ];
         }
+    }
+
+    /**
+     * Helper method untuk debug folder mapping
+     */
+    private function getFolderNameForService($serviceType)
+    {
+        $folderMapping = [
+            'repair' => 'Repair',
+            'format' => 'Format',
+            'plagiarism' => 'Plagiarism',
+            'translation' => 'Translation',
+            'proofreading' => 'Proofreading'
+        ];
+
+        return $folderMapping[$serviceType] ?? 'Others';
     }
 
     public function repairForm()
@@ -177,6 +200,11 @@ class DocumentUploadController extends Controller
                 return back()->with('error', 'Layanan tidak tersedia');
             }
 
+            Log::info('Processing repair upload', [
+                'service_type' => 'repair',
+                'expected_folder' => 'Repair'
+            ]);
+
             $uploadResult = $this->uploadFile($request->file('document'), 'repair');
 
             if (!$uploadResult['success']) {
@@ -232,6 +260,11 @@ class DocumentUploadController extends Controller
                 return back()->with('error', 'Layanan tidak tersedia');
             }
 
+            Log::info('Processing format upload', [
+                'service_type' => 'format',
+                'expected_folder' => 'Format'
+            ]);
+
             $uploadResult = $this->uploadFile($request->file('document'), 'format');
 
             if (!$uploadResult['success']) {
@@ -285,6 +318,11 @@ class DocumentUploadController extends Controller
             $product = Product::where('name', 'Cek Plagiarisme Turnitin')->first();
             $defaultPrice = $product ? $product->price : 5000;
 
+            Log::info('Processing plagiarism upload', [
+                'service_type' => 'plagiarism',
+                'expected_folder' => 'Plagiarism'
+            ]);
+
             $uploadResult = $this->uploadFile($request->file('document'), 'plagiarism');
 
             if (!$uploadResult['success']) {
@@ -314,7 +352,7 @@ class DocumentUploadController extends Controller
             // Send WhatsApp notification
             try {
                 $storageInfo = $uploadResult['is_google_drive']
-                    ? "☁️ Dokumen tersimpan aman di Google Drive"
+                    ? "☁️ Dokumen tersimpan aman di Google Drive (Folder: Plagiarism)"
                     : "📁 Dokumen tersimpan di server";
 
                 $message = "✅ *PESANAN DITERIMA*\n\n" .

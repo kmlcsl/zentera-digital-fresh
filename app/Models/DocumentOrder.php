@@ -61,7 +61,9 @@ class DocumentOrder extends Model
             'completed' => '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Selesai</span>',
         ];
 
-        return $badges[$this->payment_status] ?? '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Unknown</span>';
+        $result = $badges[$this->payment_status] ?? '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Unknown</span>';
+
+        return $result;
     }
 
     public function getServiceIconAttribute()

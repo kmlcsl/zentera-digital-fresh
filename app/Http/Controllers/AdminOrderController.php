@@ -226,28 +226,65 @@ class AdminOrderController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        $request->validate([
-            'payment_status' => 'required|in:pending,paid,completed'
-        ]);
-
         try {
+            $request->validate([
+                'payment_status' => 'required|in:pending,paid,completed'
+            ]);
+
             $order = DocumentOrder::findOrFail($id);
-            $order->payment_status = $request->payment_status;
+            $oldStatus = $order->payment_status;
+            $newStatus = $request->payment_status;
+
+            // Update payment status
+            $order->payment_status = $newStatus;
 
             // Set paid_at timestamp when status changes to paid
-            if ($request->payment_status === 'paid' && $order->payment_status !== 'paid') {
+            if ($newStatus === 'paid' && $oldStatus !== 'paid') {
                 $order->paid_at = now();
+            }
+
+            // Clear paid_at if status changes back to pending
+            if ($newStatus === 'pending') {
+                $order->paid_at = null;
             }
 
             $order->save();
 
+            // Generate new status badge HTML
+            $statusBadge = $order->status_badge;
+
+            Log::info('Payment status updated successfully', [
+                'order_id' => $id,
+                'order_number' => $order->order_number,
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus,
+                'paid_at' => $order->paid_at
+            ]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Status pembayaran berhasil diupdate!',
-                'new_status' => $order->status_badge
+                'new_status' => $order->status_badge,
+                'order' => [
+                    'id' => $order->id,
+                    'payment_status' => $order->payment_status,
+                    'paid_at' => $order->paid_at ? $order->paid_at->format('d M Y, H:i') : null
+                ]
             ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'error' => 'Data tidak valid: ' . implode(', ', $e->validator->errors()->all())
+            ], 422);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Gagal update status: ' . $e->getMessage()], 500);
+            Log::error('Error updating payment status', [
+                'order_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => 'Gagal update status: ' . $e->getMessage()
+            ], 500);
         }
     }
 
@@ -263,6 +300,22 @@ class AdminOrderController extends Controller
         try {
             $order = DocumentOrder::findOrFail($id);
 
+            // Handle document path berdasarkan storage type
+            $documentPath = null;
+            if ($order->document_path) {
+                if ($order->is_google_drive && $order->google_drive_view_url) {
+                    $documentPath = $order->google_drive_view_url;
+                } else {
+                    $documentPath = Storage::url($order->document_path);
+                }
+            }
+
+            // Handle payment proof (selalu local storage)
+            $paymentProof = null;
+            if ($order->payment_proof) {
+                $paymentProof = Storage::url($order->payment_proof);
+            }
+
             return response()->json([
                 'success' => true,
                 'order' => [
@@ -275,14 +328,34 @@ class AdminOrderController extends Controller
                     'price' => $order->formatted_price,
                     'payment_status' => $order->payment_status,
                     'notes' => $order->notes,
-                    'document_path' => $order->document_path ? Storage::url($order->document_path) : null,
-                    'payment_proof' => $order->payment_proof ? Storage::url($order->payment_proof) : null,
                     'created_at' => $order->created_at->format('d M Y, H:i'),
-                    'paid_at' => $order->paid_at ? $order->paid_at->format('d M Y, H:i') : null
+                    'paid_at' => $order->paid_at ? $order->paid_at->format('d M Y, H:i') : null,
+
+                    // Storage information
+                    'is_google_drive' => $order->is_google_drive ? true : false,
+                    'storage_type' => $order->storage_type ?? 'local',
+
+                    // Document paths
+                    'document_path' => $documentPath,
+                    'payment_proof' => $paymentProof,
+
+                    // Google Drive specific fields
+                    'google_drive_file_id' => $order->google_drive_file_id,
+                    'google_drive_view_url' => $order->google_drive_view_url,
+                    'google_drive_preview_url' => $order->google_drive_preview_url,
+                    'google_drive_download_url' => $order->google_drive_download_url,
+                    'google_drive_direct_link' => $order->google_drive_direct_link,
+                    'google_drive_thumbnail_url' => $order->google_drive_thumbnail_url
                 ]
             ]);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Order tidak ditemukan!'], 404);
+            Log::error('Error getting order details', [
+                'order_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json(['error' => 'Gagal memuat detail order: ' . $e->getMessage()], 500);
         }
     }
 
