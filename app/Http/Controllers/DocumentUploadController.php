@@ -6,21 +6,105 @@ use Illuminate\Http\Request;
 use App\Models\Product;
 use App\Models\DocumentOrder;
 use App\Services\WhatsAppService;
+use App\Services\GoogleDriveService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 
 class DocumentUploadController extends Controller
 {
-    // Remove constructor dependency, use helper method instead
+    protected $googleDriveService;
+
+    public function __construct(GoogleDriveService $googleDriveService)
+    {
+        $this->googleDriveService = $googleDriveService;
+    }
 
     protected function whatsapp()
     {
         try {
             return app(WhatsAppService::class);
         } catch (\Exception $e) {
-            // Fallback to manual instantiation if service not registered
             return new WhatsAppService();
+        }
+    }
+
+    /**
+     * Upload file dengan Google Drive + fallback local - FIXED
+     */
+    private function uploadFile($file, $serviceType)
+    {
+        Log::info('=== STARTING FILE UPLOAD ===', [
+            'service_type' => $serviceType,
+            'filename' => $file->getClientOriginalName(),
+            'size' => $file->getSize()
+        ]);
+
+        // Coba upload ke Google Drive dulu
+        $googleResult = $this->googleDriveService->uploadFile($file, $serviceType);
+
+        Log::info('Google Drive upload result:', $googleResult);
+
+        if ($googleResult['success']) {
+            Log::info('✅ File uploaded to Google Drive successfully', [
+                'file_id' => $googleResult['file_id'],
+                'service_type' => $serviceType,
+                'filename' => $googleResult['name']
+            ]);
+
+            // PERBAIKAN: Return data yang benar
+            return [
+                'success' => true,
+                'storage_type' => 'google_drive',
+                'path' => $googleResult['file_id'], // Store file_id as path
+                'google_drive_file_id' => $googleResult['file_id'],
+                'google_drive_view_url' => $googleResult['view_url'],
+                'google_drive_preview_url' => $googleResult['preview_url'],
+                'google_drive_download_url' => $googleResult['download_url'],
+                'google_drive_direct_link' => $googleResult['direct_link'],
+                'google_drive_thumbnail_url' => $googleResult['thumbnail_url'] ?? null,
+                'is_google_drive' => true // PASTIKAN TRUE
+            ];
+        }
+
+        // Fallback ke local storage jika Google Drive gagal
+        Log::warning('⚠️ Google Drive upload failed, using local storage fallback', [
+            'error' => $googleResult['error'] ?? 'Unknown error',
+            'service_type' => $serviceType
+        ]);
+
+        try {
+            $filename = time() . '_' . $file->getClientOriginalName();
+            $path = $file->storeAs("documents/{$serviceType}", $filename, 'public');
+
+            Log::info('📁 File uploaded to local storage (fallback)', [
+                'path' => $path,
+                'service_type' => $serviceType
+            ]);
+
+            return [
+                'success' => true,
+                'storage_type' => 'local',
+                'path' => $path,
+                'google_drive_file_id' => null,
+                'google_drive_view_url' => null,
+                'google_drive_preview_url' => null,
+                'google_drive_download_url' => null,
+                'google_drive_direct_link' => null,
+                'google_drive_thumbnail_url' => null,
+                'is_google_drive' => false,
+                'local_url' => Storage::url($path)
+            ];
+        } catch (\Exception $e) {
+            Log::error('❌ Both Google Drive and local storage failed', [
+                'google_error' => $googleResult['error'] ?? 'Unknown error',
+                'local_error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Upload gagal ke Google Drive dan local storage: ' . $e->getMessage()
+            ];
         }
     }
 
@@ -104,16 +188,18 @@ class DocumentUploadController extends Controller
             ]);
 
             $product = Product::where('name', 'Perbaikan Dokumen')->first();
-
             if (!$product) {
                 return back()->with('error', 'Layanan tidak tersedia');
             }
 
-            $file = $request->file('document');
-            $filename = time() . '_' . $file->getClientOriginalName();
-            $tempPath = sys_get_temp_dir() . '/' . $filename;
-            $file->move(sys_get_temp_dir(), $filename);
-            $path = 'documents/repair/' . $filename;
+            // Upload file using Google Drive
+            $uploadResult = $this->uploadFile($request->file('document'), 'repair');
+
+            if (!$uploadResult['success']) {
+                return back()->with('error', 'Gagal upload file: ' . $uploadResult['error']);
+            }
+
+            Log::info('=== CREATING ORDER WITH UPLOAD RESULT ===', $uploadResult);
 
             $order = DocumentOrder::create([
                 'order_number' => DocumentOrder::generateOrderNumber(),
@@ -122,19 +208,31 @@ class DocumentUploadController extends Controller
                 'service_type' => 'repair',
                 'service_name' => 'Perbaikan Dokumen',
                 'price' => $product->price,
-                'document_path' => $path,
+                'document_path' => $uploadResult['path'],
+                'google_drive_file_id' => $uploadResult['google_drive_file_id'],
+                'google_drive_view_url' => $uploadResult['google_drive_view_url'],
+                'google_drive_preview_url' => $uploadResult['google_drive_preview_url'],
+                'google_drive_download_url' => $uploadResult['google_drive_download_url'],
+                'google_drive_direct_link' => $uploadResult['google_drive_direct_link'],
+                'google_drive_thumbnail_url' => $uploadResult['google_drive_thumbnail_url'],
+                'is_google_drive' => $uploadResult['is_google_drive'] ? 1 : 0, // EXPLICIT CAST
+                'storage_type' => $uploadResult['storage_type'],
                 'notes' => $request->notes,
                 'payment_status' => 'pending'
             ]);
 
-            Log::info('Order created successfully: ' . $order->order_number);
+            Log::info('🔧 Repair order created', [
+                'order_number' => $order->order_number,
+                'storage_type' => $uploadResult['storage_type'],
+                'is_google_drive' => $uploadResult['is_google_drive'],
+                'google_drive_file_id' => $uploadResult['google_drive_file_id']
+            ]);
 
-            // Send WhatsApp notification using helper method
+            // Send WhatsApp notification
             try {
                 $this->whatsapp()->sendOrderConfirmation($order);
             } catch (\Exception $e) {
                 Log::error('Failed to send WhatsApp notification: ' . $e->getMessage());
-                // Continue without failing
             }
 
             return redirect()->route('payment.show', $order->order_number);
@@ -155,16 +253,18 @@ class DocumentUploadController extends Controller
             ]);
 
             $product = Product::where('name', 'Daftar Isi & Format')->first();
-
             if (!$product) {
                 return back()->with('error', 'Layanan tidak tersedia');
             }
 
-            $file = $request->file('document');
-            $filename = time() . '_' . $file->getClientOriginalName();
-            $tempPath = sys_get_temp_dir() . '/' . $filename;
-            $file->move(sys_get_temp_dir(), $filename);
-            $path = 'documents/format/' . $filename;
+            // Upload file using Google Drive
+            $uploadResult = $this->uploadFile($request->file('document'), 'format');
+
+            if (!$uploadResult['success']) {
+                return back()->with('error', 'Gagal upload file: ' . $uploadResult['error']);
+            }
+
+            Log::info('=== CREATING ORDER WITH UPLOAD RESULT ===', $uploadResult);
 
             $order = DocumentOrder::create([
                 'order_number' => DocumentOrder::generateOrderNumber(),
@@ -173,7 +273,15 @@ class DocumentUploadController extends Controller
                 'service_type' => 'format',
                 'service_name' => 'Daftar Isi & Format',
                 'price' => $product->price,
-                'document_path' => $path,
+                'document_path' => $uploadResult['path'],
+                'google_drive_file_id' => $uploadResult['google_drive_file_id'],
+                'google_drive_view_url' => $uploadResult['google_drive_view_url'],
+                'google_drive_preview_url' => $uploadResult['google_drive_preview_url'],
+                'google_drive_download_url' => $uploadResult['google_drive_download_url'],
+                'google_drive_direct_link' => $uploadResult['google_drive_direct_link'],
+                'google_drive_thumbnail_url' => $uploadResult['google_drive_thumbnail_url'],
+                'is_google_drive' => $uploadResult['is_google_drive'] ? 1 : 0, // EXPLICIT CAST
+                'storage_type' => $uploadResult['storage_type'],
                 'notes' => $request->notes,
                 'payment_status' => 'pending'
             ]);
@@ -192,15 +300,94 @@ class DocumentUploadController extends Controller
         }
     }
 
-    /**
-     * Send WhatsApp message using Wablas API
-     */
+    public function plagiarismSubmit(Request $request)
+    {
+        try {
+            $request->validate([
+                'document' => 'required|file|mimes:pdf,doc,docx,txt|max:10240',
+                'name' => 'required|string|max:255',
+                'phone' => 'required|string',
+                'notes' => 'nullable|string'
+            ]);
+
+            $product = Product::where('name', 'Cek Plagiarisme Turnitin')->first();
+            $defaultPrice = $product ? $product->price : 5000;
+
+            // Upload file using Google Drive
+            $uploadResult = $this->uploadFile($request->file('document'), 'plagiarism');
+
+            if (!$uploadResult['success']) {
+                return back()->with('error', 'Gagal upload file: ' . $uploadResult['error']);
+            }
+
+            Log::info('=== CREATING PLAGIARISM ORDER WITH UPLOAD RESULT ===', $uploadResult);
+
+            $order = DocumentOrder::create([
+                'order_number' => DocumentOrder::generateOrderNumber(),
+                'customer_name' => $request->name,
+                'customer_phone' => $request->phone,
+                'service_type' => 'plagiarism',
+                'service_name' => 'Cek Plagiarisme Turnitin',
+                'price' => $defaultPrice,
+                'document_path' => $uploadResult['path'],
+                'google_drive_file_id' => $uploadResult['google_drive_file_id'],
+                'google_drive_view_url' => $uploadResult['google_drive_view_url'],
+                'google_drive_preview_url' => $uploadResult['google_drive_preview_url'],
+                'google_drive_download_url' => $uploadResult['google_drive_download_url'],
+                'google_drive_direct_link' => $uploadResult['google_drive_direct_link'],
+                'google_drive_thumbnail_url' => $uploadResult['google_drive_thumbnail_url'],
+                'is_google_drive' => $uploadResult['is_google_drive'] ? 1 : 0, // EXPLICIT CAST
+                'storage_type' => $uploadResult['storage_type'],
+                'notes' => $request->notes,
+                'payment_status' => 'pending'
+            ]);
+
+            Log::info('🔍 Plagiarism order created with correct Google Drive data', [
+                'order_number' => $order->order_number,
+                'storage_type' => $order->storage_type,
+                'is_google_drive' => $order->is_google_drive,
+                'google_drive_file_id' => $order->google_drive_file_id,
+                'google_drive_view_url' => $order->google_drive_view_url
+            ]);
+
+            // Send WhatsApp notification
+            try {
+                $storageInfo = $uploadResult['is_google_drive']
+                    ? "☁️ Dokumen tersimpan aman di Google Drive cloud storage"
+                    : "📁 Dokumen tersimpan di server";
+
+                $message = "✅ *PESANAN DITERIMA*\n\n" .
+                    "📋 Detail Pesanan:\n" .
+                    "🔢 No. Order: #{$order->order_number}\n" .
+                    "👤 Nama: {$order->customer_name}\n" .
+                    "📱 Phone: {$order->customer_phone}\n" .
+                    "🔧 Layanan: {$order->service_name}\n" .
+                    "💰 Total: Rp " . number_format($order->price, 0, ',', '.') . "\n\n" .
+                    "{$storageInfo}\n" .
+                    "⏰ Estimasi: 1-2 hari kerja setelah pembayaran\n\n" .
+                    "Silakan lakukan pembayaran untuk memproses pesanan Anda.\n\n" .
+                    "Terima kasih! 🙏\n\n" .
+                    "*Zentera Digital - Solusi Dokumen Terpercaya* ✨";
+
+                $this->sendWhatsAppMessage($order->customer_phone, $message);
+            } catch (\Exception $e) {
+                Log::error('Failed to send WhatsApp notification: ' . $e->getMessage());
+            }
+
+            return redirect()->route('payment.show', $order->order_number);
+        } catch (\Exception $e) {
+            Log::error('Plagiarism submit error: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+            return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
+        }
+    }
+
+    // Keep existing WhatsApp methods
     public function sendWablasMessage($phone, $message)
     {
-        $token = config('services.wablas.token'); // Tambah di config
-        $baseUrl = config('services.wablas.base_url'); // Tambah di config
+        $token = config('services.wablas.token');
+        $baseUrl = config('services.wablas.base_url');
 
-        // Clean phone number
         $phone = preg_replace('/[^0-9]/', '', $phone);
         if (!str_starts_with($phone, '62')) {
             if (str_starts_with($phone, '0')) {
@@ -231,82 +418,6 @@ class DocumentUploadController extends Controller
         }
     }
 
-    /**
-     * Update plagiarismSubmit to use Wablas
-     */
-    public function plagiarismSubmit(Request $request)
-    {
-        try {
-            // Validation
-            $request->validate([
-                'document' => 'required|file|mimes:pdf,doc,docx,txt|max:10240',
-                'name' => 'required|string|max:255',
-                'phone' => 'required|string',
-                'notes' => 'nullable|string'
-            ]);
-
-            // Get product and set price
-            $product = Product::where('name', 'Cek Plagiarisme Turnitin')->first();
-
-            if (!$product) {
-                $defaultPrice = 25000;
-                Log::warning('Product not found, using default price: ' . $defaultPrice);
-            } else {
-                $defaultPrice = $product->price;
-            }
-
-            // Handle file upload
-            $file = $request->file('document');
-            $filename = time() . '_' . $file->getClientOriginalName();
-            $tempPath = sys_get_temp_dir() . '/' . $filename;
-            $file->move(sys_get_temp_dir(), $filename);
-            $path = 'documents/plagiarism/' . $filename;
-
-            // Create order
-            $order = DocumentOrder::create([
-                'order_number' => DocumentOrder::generateOrderNumber(),
-                'customer_name' => $request->name,
-                'customer_phone' => $request->phone,
-                'service_type' => 'plagiarism',
-                'service_name' => 'Cek Plagiarisme Turnitin',
-                'price' => $defaultPrice,
-                'document_path' => $path,
-                'notes' => $request->notes,
-                'payment_status' => 'pending'
-            ]);
-
-            Log::info('Plagiarism order created: ' . $order->order_number);
-
-            // Send WhatsApp notification using existing FONNTE method (safer for now)
-            try {
-                $message = "✅ *PESANAN DITERIMA*\n\n" .
-                    "📋 Detail Pesanan:\n" .
-                    "🔢 No. Order: #{$order->order_number}\n" .
-                    "👤 Nama: {$order->customer_name}\n" .
-                    "📱 Phone: {$order->customer_phone}\n" .
-                    "🔧 Layanan: {$order->service_name}\n" .
-                    "💰 Total: " . number_format($order->price, 0, ',', '.') . "\n\n" .
-                    "⏰ Estimasi: 1-2 hari kerja setelah pembayaran\n\n" .
-                    "Silakan lakukan pembayaran untuk memproses pesanan Anda.\n\n" .
-                    "Terima kasih! 🙏\n\n" .
-                    "*Zentera Digital - Solusi Dokumen Terpercaya* ✨";
-
-                // Use existing FONNTE method for now
-                $this->sendWhatsAppMessage($order->customer_phone, $message);
-            } catch (\Exception $e) {
-                Log::error('Failed to send WhatsApp notification: ' . $e->getMessage());
-                // Continue without failing
-            }
-
-            return redirect()->route('payment.show', $order->order_number);
-        } catch (\Exception $e) {
-            Log::error('Plagiarism submit error: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
-            return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
-        }
-    }
-
-    // Keep existing method for compatibility
     public function sendWhatsAppMessage($phone, $message)
     {
         $token = config('services.fonnte.token');

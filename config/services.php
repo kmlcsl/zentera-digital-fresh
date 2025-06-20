@@ -35,6 +35,11 @@ return [
         ],
     ],
 
+    'google_drive' => [
+        'service_account_file' => storage_path('app/google-service-account.json'),
+        'folder_id' => env('GOOGLE_DRIVE_FOLDER_ID'),
+    ],
+
     'wablas' => [
         'token' => env('WABLAS_TOKEN', ''),
         'base_url' => env('WABLAS_BASE_URL', ''),

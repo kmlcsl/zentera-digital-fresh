@@ -180,15 +180,29 @@
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         @if ($order->document_path)
                                             <div class="flex space-x-2">
-                                                <a href="{{ Storage::url($order->document_path) }}" target="_blank"
-                                                    class="text-blue-600 hover:text-blue-800 text-sm">
-                                                    <i class="fas fa-file-download mr-1"></i>Download
-                                                </a>
-                                                <button
-                                                    onclick="previewFile('{{ Storage::url($order->document_path) }}', 'document')"
-                                                    class="text-green-600 hover:text-green-800 text-sm">
-                                                    <i class="fas fa-eye mr-1"></i>Preview
-                                                </button>
+                                                @if ($order->is_google_drive && $order->google_drive_file_id)
+                                                    <!-- GOOGLE DRIVE FILES -->
+                                                    <a href="{{ $order->google_drive_view_url }}" target="_blank"
+                                                        class="text-blue-600 hover:text-blue-800 text-sm">
+                                                        <i class="fab fa-google-drive mr-1"></i>Drive
+                                                    </a>
+                                                    <button
+                                                        onclick="previewFile('{{ $order->google_drive_view_url }}', 'document', true, '{{ $order->google_drive_file_id }}')"
+                                                        class="text-green-600 hover:text-green-800 text-sm">
+                                                        <i class="fas fa-eye mr-1"></i>Preview
+                                                    </button>
+                                                @else
+                                                    <!-- LOCAL FILES -->
+                                                    <a href="{{ Storage::url($order->document_path) }}" target="_blank"
+                                                        class="text-blue-600 hover:text-blue-800 text-sm">
+                                                        <i class="fas fa-file-download mr-1"></i>Download
+                                                    </a>
+                                                    <button
+                                                        onclick="previewFile('{{ Storage::url($order->document_path) }}', 'document', false)"
+                                                        class="text-green-600 hover:text-green-800 text-sm">
+                                                        <i class="fas fa-eye mr-1"></i>Preview
+                                                    </button>
+                                                @endif
                                             </div>
                                         @else
                                             <span class="text-gray-400 text-sm">No file</span>
@@ -350,6 +364,12 @@
                 .then(data => {
                     if (data.success) {
                         const order = data.order;
+
+                        // Storage info display
+                        const storageInfo = order.is_google_drive ?
+                            '<span class="text-blue-600"><i class="fab fa-google-drive mr-1"></i>Google Drive</span>' :
+                            '<span class="text-gray-600"><i class="fas fa-server mr-1"></i>Local Server</span>';
+
                         document.getElementById('orderDetailContent').innerHTML = `
                     <div class="space-y-4">
                         <div class="grid grid-cols-2 gap-4">
@@ -365,6 +385,7 @@
                                             ${getStatusText(order.payment_status)}
                                         </span>
                                     </div>
+                                    <div><span class="font-medium">Storage:</span> ${storageInfo}</div>
                                 </div>
                             </div>
 
@@ -379,22 +400,30 @@
                         </div>
 
                         ${order.notes ? `
-                                    <div>
-                                        <h4 class="font-semibold text-gray-800 mb-2">Catatan</h4>
-                                        <div class="bg-gray-50 p-3 rounded-md text-sm">
-                                            ${order.notes}
+                                        <div>
+                                            <h4 class="font-semibold text-gray-800 mb-2">Catatan</h4>
+                                            <div class="bg-gray-50 p-3 rounded-md text-sm">
+                                                ${order.notes}
+                                            </div>
                                         </div>
-                                    </div>
                                     ` : ''}
 
                         <div class="grid grid-cols-2 gap-4">
                             <div class="text-center">
                                 <h4 class="font-semibold text-gray-800 mb-2">Dokumen</h4>
                                 ${order.document_path ? `
-                                                <a href="${order.document_path}" target="_blank"
-                                                   class="bg-blue-100 text-blue-600 px-4 py-2 rounded-md hover:bg-blue-200 inline-block">
-                                                    <i class="fas fa-download mr-2"></i>Download File
-                                                </a>
+                                                <div class="space-y-2">
+                                                    <a href="${order.document_path}" target="_blank"
+                                                       class="bg-blue-100 text-blue-600 px-4 py-2 rounded-md hover:bg-blue-200 inline-block">
+                                                        <i class="${order.is_google_drive ? 'fab fa-google-drive' : 'fas fa-download'} mr-2"></i>
+                                                        ${order.is_google_drive ? 'Buka di Google Drive' : 'Download File'}
+                                                    </a>
+                                                    <br>
+                                                    <button onclick="previewFile('${order.document_path}', 'document', ${order.is_google_drive}, '${order.google_drive_file_id || ''}')"
+                                                            class="bg-green-100 text-green-600 px-4 py-2 rounded-md hover:bg-green-200">
+                                                        <i class="fas fa-eye mr-2"></i>Preview
+                                                    </button>
+                                                </div>
                                             ` : '<span class="text-gray-400">Tidak ada file</span>'}
                             </div>
 
@@ -448,12 +477,8 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        // Update status badge di table
                         document.getElementById(`status-${orderId}`).innerHTML = data.new_status;
-
                         closeModal('updateStatusModal');
-
-                        // Show success message
                         showNotification('Status berhasil diupdate!', 'success');
                     } else {
                         alert('Gagal mengupdate status: ' + data.error);
@@ -465,33 +490,160 @@
                 });
         });
 
-        // Preview File
-        function previewFile(fileUrl, type) {
+        // Preview File - UPDATED untuk Google Drive
+        function previewFile(fileUrl, type, isGoogleDrive = false, googleDriveFileId = null) {
+            console.log('=== PREVIEW FUNCTION START ===');
+            console.log('FileURL:', fileUrl);
+            console.log('Type:', type);
+            console.log('Is Google Drive:', isGoogleDrive);
+            console.log('Google Drive File ID:', googleDriveFileId);
+
             const content = document.getElementById('filePreviewContent');
 
-            if (type === 'payment' || fileUrl.includes('.jpg') || fileUrl.includes('.png') || fileUrl.includes('.jpeg') ||
-                fileUrl.includes('.pdf')) {
+            // GOOGLE DRIVE FILES
+            if (isGoogleDrive && googleDriveFileId) {
+                console.log('✅ Using Google Drive preview');
+
+                const googlePreviewUrl = `https://drive.google.com/file/d/${googleDriveFileId}/preview`;
+                const googleViewUrl = `https://drive.google.com/file/d/${googleDriveFileId}/view`;
+                const googleDownloadUrl = `https://drive.google.com/uc?export=download&id=${googleDriveFileId}`;
+
                 content.innerHTML = `
-            <img src="${fileUrl}" alt="Preview" class="max-w-full max-h-96 mx-auto rounded-md shadow-lg">
-            <div class="mt-4">
-                <a href="${fileUrl}" target="_blank" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
-                    <i class="fas fa-external-link-alt mr-2"></i>Buka di Tab Baru
-                </a>
+            <div class="text-center">
+                <div class="mb-4">
+                    <div class="flex items-center justify-center mb-2">
+                        <i class="fab fa-google-drive text-2xl text-blue-600 mr-2"></i>
+                        <p class="text-sm text-gray-600">File disimpan di Google Drive</p>
+                    </div>
+
+                    <!-- Google Drive Preview -->
+                    <div class="border rounded-md bg-white p-2 shadow-sm">
+                        <iframe src="${googlePreviewUrl}"
+                                width="100%" height="450px"
+                                class="border-0 rounded"
+                                onload="console.log('Google Drive preview loaded')"
+                                onerror="console.log('Google Drive preview failed'); showGoogleDriveError('${googleViewUrl}', '${googleDownloadUrl}');">
+                        </iframe>
+                    </div>
+                </div>
+
+                <div class="flex justify-center space-x-2 mt-4">
+                    <a href="${googleViewUrl}" target="_blank"
+                       class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center">
+                        <i class="fab fa-google-drive mr-2"></i>Buka di Google Drive
+                    </a>
+                    <a href="${googleDownloadUrl}" target="_blank"
+                       class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center">
+                        <i class="fas fa-download mr-2"></i>Download
+                    </a>
+                </div>
+
+                <div class="mt-3 text-xs text-gray-500">
+                    <p>📁 File ID: ${googleDriveFileId}</p>
+                    <p>☁️ Disimpan aman di Google Drive</p>
+                </div>
             </div>
         `;
-            } else {
+            }
+            // PAYMENT IMAGES (Local storage)
+            else if (type === 'payment') {
+                console.log('✅ Using local image preview');
+                content.innerHTML = `
+            <div class="text-center">
+                <div class="mb-4">
+                    <img src="${fileUrl}" alt="Bukti Pembayaran"
+                         class="max-w-full max-h-96 mx-auto rounded-md shadow-lg"
+                         onload="console.log('Payment image loaded')"
+                         onerror="showImageError('${fileUrl}');">
+                </div>
+                <div class="mt-4">
+                    <a href="${fileUrl}" target="_blank"
+                       class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 mr-2">
+                        <i class="fas fa-external-link-alt mr-2"></i>Buka di Tab Baru
+                    </a>
+                    <a href="${fileUrl}" download
+                       class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">
+                        <i class="fas fa-download mr-2"></i>Download
+                    </a>
+                </div>
+            </div>
+        `;
+            }
+            // FALLBACK untuk file lainnya
+            else {
+                console.log('❌ Using fallback preview');
+                const extension = fileUrl.split('.').pop().toLowerCase();
+
                 content.innerHTML = `
             <div class="text-center py-8">
                 <i class="fas fa-file-alt text-6xl text-gray-400 mb-4"></i>
-                <p class="text-gray-600 mb-4">Preview tidak tersedia untuk file ini</p>
-                <a href="${fileUrl}" target="_blank" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
-                    <i class="fas fa-download mr-2"></i>Download File
-                </a>
+                <p class="text-gray-700 text-lg font-medium mb-2">File .${extension.toUpperCase()}</p>
+                <p class="text-gray-600 mb-4">Preview menggunakan browser default</p>
+                <div class="space-x-2">
+                    <a href="${fileUrl}" target="_blank"
+                       class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                        <i class="fas fa-external-link-alt mr-2"></i>Buka di Tab Baru
+                    </a>
+                    <a href="${fileUrl}" download
+                       class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">
+                        <i class="fas fa-download mr-2"></i>Download
+                    </a>
+                </div>
             </div>
         `;
             }
 
+            console.log('=== PREVIEW FUNCTION END ===');
             document.getElementById('filePreviewModal').classList.remove('hidden');
+        }
+
+        // Error handler untuk Google Drive
+        function showGoogleDriveError(viewUrl, downloadUrl) {
+            const content = document.getElementById('filePreviewContent');
+            content.innerHTML = `
+        <div class="text-center py-8">
+            <i class="fab fa-google-drive text-6xl text-blue-400 mb-4"></i>
+            <p class="text-gray-700 text-lg font-medium mb-2">Google Drive Preview</p>
+            <p class="text-gray-600 mb-4">Preview tidak dapat dimuat, silakan buka langsung</p>
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 max-w-md mx-auto">
+                <p class="text-blue-800 text-sm">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    File tersimpan aman di Google Drive dan dapat diakses kapan saja
+                </p>
+            </div>
+            <div class="space-x-2">
+                <a href="${viewUrl}" target="_blank"
+                   class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                    <i class="fab fa-google-drive mr-2"></i>Buka di Google Drive
+                </a>
+                <a href="${downloadUrl}" target="_blank"
+                   class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">
+                    <i class="fas fa-download mr-2"></i>Download
+                </a>
+            </div>
+        </div>
+    `;
+        }
+
+        // Error handler untuk gambar lokal
+        function showImageError(fileUrl) {
+            const content = document.getElementById('filePreviewContent');
+            content.innerHTML = `
+        <div class="text-center py-8">
+            <i class="fas fa-image text-6xl text-gray-400 mb-4"></i>
+            <p class="text-gray-600 mb-4">Gagal memuat gambar</p>
+            <div class="space-x-2">
+                <a href="${fileUrl}" target="_blank"
+                   class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                    <i class="fas fa-external-link-alt mr-2"></i>Buka di Tab Baru
+                </a>
+                <a href="${fileUrl}" download
+                   class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">
+                    <i class="fas fa-download mr-2"></i>Download
+                </a>
+            </div>
+        </div>
+    `;
         }
 
         // Delete Order

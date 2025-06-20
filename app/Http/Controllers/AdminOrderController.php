@@ -286,9 +286,6 @@ class AdminOrderController extends Controller
         }
     }
 
-    /**
-     * Download document or payment proof - NEW METHOD
-     */
     public function downloadFile($id, $type)
     {
         if (!Session::get('admin_logged_in')) {
@@ -299,25 +296,42 @@ class AdminOrderController extends Controller
             $order = DocumentOrder::findOrFail($id);
 
             if ($type === 'document' && $order->document_path) {
-                $filePath = storage_path('app/public/' . $order->document_path);
-                $fileName = basename($order->document_path);
+                // PERBAIKAN: Path handling yang benar
+                $fullPath = storage_path('app/public/' . $order->document_path);
 
-                if (file_exists($filePath)) {
-                    return response()->download($filePath, $fileName);
+                Log::info('Attempting to download file', [
+                    'order_id' => $id,
+                    'document_path' => $order->document_path,
+                    'full_path' => $fullPath,
+                    'file_exists' => file_exists($fullPath)
+                ]);
+
+                if (file_exists($fullPath)) {
+                    $fileName = basename($order->document_path);
+                    return response()->download($fullPath, $fileName);
+                } else {
+                    Log::warning('File not found', [
+                        'path' => $fullPath,
+                        'order_id' => $id
+                    ]);
+                    return back()->with('error', 'File dokumen tidak ditemukan di: ' . $fullPath);
                 }
             }
 
             if ($type === 'payment' && $order->payment_proof) {
-                $filePath = storage_path('app/public/' . $order->payment_proof);
-                $fileName = basename($order->payment_proof);
+                $fullPath = storage_path('app/public/' . $order->payment_proof);
 
-                if (file_exists($filePath)) {
-                    return response()->download($filePath, $fileName);
+                if (file_exists($fullPath)) {
+                    $fileName = basename($order->payment_proof);
+                    return response()->download($fullPath, $fileName);
+                } else {
+                    return back()->with('error', 'File bukti pembayaran tidak ditemukan!');
                 }
             }
 
-            return back()->with('error', 'File tidak ditemukan!');
+            return back()->with('error', 'File tidak ditemukan atau tipe file tidak valid!');
         } catch (\Exception $e) {
+            Log::error('Download file error: ' . $e->getMessage());
             return back()->with('error', 'Gagal mengunduh file: ' . $e->getMessage());
         }
     }
