@@ -50,31 +50,33 @@ class GoogleDriveService
         }
     }
 
-    public function uploadFile($file, $fileName = null, $mimeType = null)
+    public function uploadFile($file, $serviceType = null, $mimeType = null)
     {
         try {
             // Handle different input types
             if ($file instanceof UploadedFile) {
                 // Laravel UploadedFile object
                 $content = $file->get();
-                $fileName = $fileName ?: $file->getClientOriginalName();
+                $fileName = $file->getClientOriginalName();
                 $mimeType = $mimeType ?: $file->getMimeType();
 
                 Log::info('Processing UploadedFile', [
                     'original_name' => $file->getClientOriginalName(),
                     'size' => $file->getSize(),
-                    'mime_type' => $file->getMimeType()
+                    'mime_type' => $file->getMimeType(),
+                    'service_type' => $serviceType
                 ]);
             } elseif (is_string($file) && file_exists($file)) {
                 // File path string
                 $content = file_get_contents($file);
-                $fileName = $fileName ?: basename($file);
+                $fileName = basename($file);
                 $mimeType = $mimeType ?: mime_content_type($file);
 
                 Log::info('Processing file path', [
                     'file_path' => $file,
                     'file_name' => $fileName,
-                    'mime_type' => $mimeType
+                    'mime_type' => $mimeType,
+                    'service_type' => $serviceType
                 ]);
             } else {
                 throw new \Exception("Invalid file input. Expected UploadedFile object or valid file path.");
@@ -85,10 +87,13 @@ class GoogleDriveService
                 throw new \Exception("File content is empty or could not be read.");
             }
 
+            // Get or create appropriate subfolder
+            $parentFolderId = $this->getOrCreateSubfolder($serviceType);
+
             // Create file metadata for Google Drive
             $fileMetadata = new \Google\Service\Drive\DriveFile([
                 'name' => $fileName,
-                'parents' => [env('GOOGLE_DRIVE_FOLDER_ID', '1KQWlg9P99xPSoJ43RABMpm1mZPQN0MzF')]
+                'parents' => [$parentFolderId]
             ]);
 
             // Upload to Google Drive
@@ -111,7 +116,9 @@ class GoogleDriveService
                 'file_id' => $driveFile->id,
                 'original_name' => $fileName,
                 'mime_type' => $mimeType,
-                'size' => strlen($content)
+                'size' => strlen($content),
+                'service_type' => $serviceType,
+                'parent_folder' => $parentFolderId
             ]);
 
             return $driveFile->id;
@@ -119,10 +126,78 @@ class GoogleDriveService
             Log::error('Failed to upload file to Google Drive: ' . $e->getMessage(), [
                 'file_type' => get_class($file),
                 'file_name' => $fileName ?? 'unknown',
+                'service_type' => $serviceType,
                 'error_line' => $e->getLine(),
                 'error_file' => $e->getFile()
             ]);
             throw $e;
+        }
+    }
+
+    /**
+     * Get or create subfolder based on service type
+     */
+    private function getOrCreateSubfolder($serviceType)
+    {
+        try {
+            $rootFolderId = env('GOOGLE_DRIVE_FOLDER_ID', '1KQWlg9P99xPSoJ43RABMpm1mZPQN0MzF');
+
+            // Map service types to folder names
+            $folderMapping = [
+                'repair' => 'Repair',
+                'format' => 'Format',
+                'plagiarism' => 'Plagiarism',
+                'translation' => 'Translation',
+                'proofreading' => 'Proofreading'
+            ];
+
+            $folderName = $folderMapping[$serviceType] ?? 'Others';
+
+            // Search for existing subfolder
+            $query = "name='{$folderName}' and parents in '{$rootFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+
+            $existingFolders = $this->drive->files->listFiles([
+                'q' => $query,
+                'fields' => 'files(id, name)'
+            ]);
+
+            if (!empty($existingFolders->getFiles())) {
+                $subfolderId = $existingFolders->getFiles()[0]->getId();
+                Log::info("Using existing subfolder", [
+                    'folder_name' => $folderName,
+                    'folder_id' => $subfolderId,
+                    'service_type' => $serviceType
+                ]);
+                return $subfolderId;
+            }
+
+            // Create new subfolder if not exists
+            $folderMetadata = new \Google\Service\Drive\DriveFile([
+                'name' => $folderName,
+                'mimeType' => 'application/vnd.google-apps.folder',
+                'parents' => [$rootFolderId]
+            ]);
+
+            $createdFolder = $this->drive->files->create($folderMetadata, [
+                'fields' => 'id'
+            ]);
+
+            Log::info("Created new subfolder", [
+                'folder_name' => $folderName,
+                'folder_id' => $createdFolder->getId(),
+                'service_type' => $serviceType,
+                'parent_folder' => $rootFolderId
+            ]);
+
+            return $createdFolder->getId();
+        } catch (\Exception $e) {
+            Log::warning('Failed to create/get subfolder, using root folder', [
+                'service_type' => $serviceType,
+                'error' => $e->getMessage()
+            ]);
+
+            // Fallback to root folder if subfolder creation fails
+            return env('GOOGLE_DRIVE_FOLDER_ID', '1KQWlg9P99xPSoJ43RABMpm1mZPQN0MzF');
         }
     }
 
