@@ -30,57 +30,46 @@ class DocumentUploadController extends Controller
     }
 
     /**
-     * Upload file dengan Google Drive + fallback local - FIXED
+     * Upload file dengan Google Drive + fallback local
      */
     private function uploadFile($file, $serviceType)
     {
-        Log::info('=== STARTING FILE UPLOAD ===', [
-            'service_type' => $serviceType,
-            'filename' => $file->getClientOriginalName(),
-            'size' => $file->getSize()
-        ]);
+        try {
+            // Upload to Google Drive
+            $fileId = $this->googleDriveService->uploadFile($file);
 
-        // Coba upload ke Google Drive dulu
-        $googleResult = $this->googleDriveService->uploadFile($file, $serviceType);
+            if ($fileId) {
+                $urls = $this->googleDriveService->generateUrls($fileId);
 
-        Log::info('Google Drive upload result:', $googleResult);
+                Log::info('File uploaded to Google Drive', [
+                    'file_id' => $fileId,
+                    'service_type' => $serviceType
+                ]);
 
-        if ($googleResult['success']) {
-            Log::info('✅ File uploaded to Google Drive successfully', [
-                'file_id' => $googleResult['file_id'],
-                'service_type' => $serviceType,
-                'filename' => $googleResult['name']
+                return [
+                    'success' => true,
+                    'storage_type' => 'google_drive',
+                    'path' => $fileId,
+                    'google_drive_file_id' => $fileId,
+                    'google_drive_view_url' => $urls['view_url'],
+                    'google_drive_preview_url' => $urls['preview_url'],
+                    'google_drive_download_url' => $urls['download_url'],
+                    'google_drive_direct_link' => $urls['direct_link'],
+                    'google_drive_thumbnail_url' => $urls['thumbnail_url'],
+                    'is_google_drive' => true
+                ];
+            }
+        } catch (\Exception $e) {
+            Log::warning('Google Drive upload failed, using local fallback', [
+                'error' => $e->getMessage(),
+                'service_type' => $serviceType
             ]);
-
-            // PERBAIKAN: Return data yang benar
-            return [
-                'success' => true,
-                'storage_type' => 'google_drive',
-                'path' => $googleResult['file_id'], // Store file_id as path
-                'google_drive_file_id' => $googleResult['file_id'],
-                'google_drive_view_url' => $googleResult['view_url'],
-                'google_drive_preview_url' => $googleResult['preview_url'],
-                'google_drive_download_url' => $googleResult['download_url'],
-                'google_drive_direct_link' => $googleResult['direct_link'],
-                'google_drive_thumbnail_url' => $googleResult['thumbnail_url'] ?? null,
-                'is_google_drive' => true // PASTIKAN TRUE
-            ];
         }
 
-        // Fallback ke local storage jika Google Drive gagal
-        Log::warning('⚠️ Google Drive upload failed, using local storage fallback', [
-            'error' => $googleResult['error'] ?? 'Unknown error',
-            'service_type' => $serviceType
-        ]);
-
+        // Fallback to local storage
         try {
             $filename = time() . '_' . $file->getClientOriginalName();
             $path = $file->storeAs("documents/{$serviceType}", $filename, 'public');
-
-            Log::info('📁 File uploaded to local storage (fallback)', [
-                'path' => $path,
-                'service_type' => $serviceType
-            ]);
 
             return [
                 'success' => true,
@@ -92,18 +81,16 @@ class DocumentUploadController extends Controller
                 'google_drive_download_url' => null,
                 'google_drive_direct_link' => null,
                 'google_drive_thumbnail_url' => null,
-                'is_google_drive' => false,
-                'local_url' => Storage::url($path)
+                'is_google_drive' => false
             ];
         } catch (\Exception $e) {
-            Log::error('❌ Both Google Drive and local storage failed', [
-                'google_error' => $googleResult['error'] ?? 'Unknown error',
-                'local_error' => $e->getMessage()
+            Log::error('Both Google Drive and local storage failed', [
+                'error' => $e->getMessage()
             ]);
 
             return [
                 'success' => false,
-                'error' => 'Upload gagal ke Google Drive dan local storage: ' . $e->getMessage()
+                'error' => 'Upload gagal: ' . $e->getMessage()
             ];
         }
     }
@@ -123,7 +110,7 @@ class DocumentUploadController extends Controller
 
             return view('documents.upload.repair', compact('product'));
         } catch (\Exception $e) {
-            Log::error('Repair form error: ' . $e->getMessage());
+            Log::error('Repair form error', ['error' => $e->getMessage()]);
             return redirect()->route('products')->with('error', 'Terjadi kesalahan sistem');
         }
     }
@@ -143,7 +130,7 @@ class DocumentUploadController extends Controller
 
             return view('documents.upload.format', compact('product'));
         } catch (\Exception $e) {
-            Log::error('Format form error: ' . $e->getMessage());
+            Log::error('Format form error', ['error' => $e->getMessage()]);
             return redirect()->route('products')->with('error', 'Terjadi kesalahan sistem');
         }
     }
@@ -158,7 +145,6 @@ class DocumentUploadController extends Controller
             }
 
             if (!$product) {
-                Log::warning('Product not found, creating fallback');
                 $product = (object) [
                     'name' => 'Cek Plagiarisme Turnitin',
                     'description' => 'Layanan pengecekan plagiarisme menggunakan Turnitin',
@@ -171,8 +157,7 @@ class DocumentUploadController extends Controller
 
             return view('documents.upload.plagiarism', compact('product'));
         } catch (\Exception $e) {
-            Log::error('Plagiarism form error: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Plagiarism form error', ['error' => $e->getMessage()]);
             return redirect()->route('products')->with('error', 'Terjadi kesalahan sistem');
         }
     }
@@ -192,14 +177,11 @@ class DocumentUploadController extends Controller
                 return back()->with('error', 'Layanan tidak tersedia');
             }
 
-            // Upload file using Google Drive
             $uploadResult = $this->uploadFile($request->file('document'), 'repair');
 
             if (!$uploadResult['success']) {
-                return back()->with('error', 'Gagal upload file: ' . $uploadResult['error']);
+                return back()->with('error', $uploadResult['error']);
             }
-
-            Log::info('=== CREATING ORDER WITH UPLOAD RESULT ===', $uploadResult);
 
             $order = DocumentOrder::create([
                 'order_number' => DocumentOrder::generateOrderNumber(),
@@ -215,29 +197,22 @@ class DocumentUploadController extends Controller
                 'google_drive_download_url' => $uploadResult['google_drive_download_url'],
                 'google_drive_direct_link' => $uploadResult['google_drive_direct_link'],
                 'google_drive_thumbnail_url' => $uploadResult['google_drive_thumbnail_url'],
-                'is_google_drive' => $uploadResult['is_google_drive'] ? 1 : 0, // EXPLICIT CAST
+                'is_google_drive' => $uploadResult['is_google_drive'] ? 1 : 0,
                 'storage_type' => $uploadResult['storage_type'],
                 'notes' => $request->notes,
                 'payment_status' => 'pending'
-            ]);
-
-            Log::info('🔧 Repair order created', [
-                'order_number' => $order->order_number,
-                'storage_type' => $uploadResult['storage_type'],
-                'is_google_drive' => $uploadResult['is_google_drive'],
-                'google_drive_file_id' => $uploadResult['google_drive_file_id']
             ]);
 
             // Send WhatsApp notification
             try {
                 $this->whatsapp()->sendOrderConfirmation($order);
             } catch (\Exception $e) {
-                Log::error('Failed to send WhatsApp notification: ' . $e->getMessage());
+                Log::error('WhatsApp notification failed', ['error' => $e->getMessage()]);
             }
 
             return redirect()->route('payment.show', $order->order_number);
         } catch (\Exception $e) {
-            Log::error('Repair submit error: ' . $e->getMessage());
+            Log::error('Repair submit error', ['error' => $e->getMessage()]);
             return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
         }
     }
@@ -257,14 +232,11 @@ class DocumentUploadController extends Controller
                 return back()->with('error', 'Layanan tidak tersedia');
             }
 
-            // Upload file using Google Drive
             $uploadResult = $this->uploadFile($request->file('document'), 'format');
 
             if (!$uploadResult['success']) {
-                return back()->with('error', 'Gagal upload file: ' . $uploadResult['error']);
+                return back()->with('error', $uploadResult['error']);
             }
-
-            Log::info('=== CREATING ORDER WITH UPLOAD RESULT ===', $uploadResult);
 
             $order = DocumentOrder::create([
                 'order_number' => DocumentOrder::generateOrderNumber(),
@@ -280,7 +252,7 @@ class DocumentUploadController extends Controller
                 'google_drive_download_url' => $uploadResult['google_drive_download_url'],
                 'google_drive_direct_link' => $uploadResult['google_drive_direct_link'],
                 'google_drive_thumbnail_url' => $uploadResult['google_drive_thumbnail_url'],
-                'is_google_drive' => $uploadResult['is_google_drive'] ? 1 : 0, // EXPLICIT CAST
+                'is_google_drive' => $uploadResult['is_google_drive'] ? 1 : 0,
                 'storage_type' => $uploadResult['storage_type'],
                 'notes' => $request->notes,
                 'payment_status' => 'pending'
@@ -290,12 +262,12 @@ class DocumentUploadController extends Controller
             try {
                 $this->whatsapp()->sendOrderConfirmation($order);
             } catch (\Exception $e) {
-                Log::error('Failed to send WhatsApp notification: ' . $e->getMessage());
+                Log::error('WhatsApp notification failed', ['error' => $e->getMessage()]);
             }
 
             return redirect()->route('payment.show', $order->order_number);
         } catch (\Exception $e) {
-            Log::error('Format submit error: ' . $e->getMessage());
+            Log::error('Format submit error', ['error' => $e->getMessage()]);
             return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
         }
     }
@@ -313,14 +285,11 @@ class DocumentUploadController extends Controller
             $product = Product::where('name', 'Cek Plagiarisme Turnitin')->first();
             $defaultPrice = $product ? $product->price : 5000;
 
-            // Upload file using Google Drive
             $uploadResult = $this->uploadFile($request->file('document'), 'plagiarism');
 
             if (!$uploadResult['success']) {
-                return back()->with('error', 'Gagal upload file: ' . $uploadResult['error']);
+                return back()->with('error', $uploadResult['error']);
             }
-
-            Log::info('=== CREATING PLAGIARISM ORDER WITH UPLOAD RESULT ===', $uploadResult);
 
             $order = DocumentOrder::create([
                 'order_number' => DocumentOrder::generateOrderNumber(),
@@ -336,24 +305,16 @@ class DocumentUploadController extends Controller
                 'google_drive_download_url' => $uploadResult['google_drive_download_url'],
                 'google_drive_direct_link' => $uploadResult['google_drive_direct_link'],
                 'google_drive_thumbnail_url' => $uploadResult['google_drive_thumbnail_url'],
-                'is_google_drive' => $uploadResult['is_google_drive'] ? 1 : 0, // EXPLICIT CAST
+                'is_google_drive' => $uploadResult['is_google_drive'] ? 1 : 0,
                 'storage_type' => $uploadResult['storage_type'],
                 'notes' => $request->notes,
                 'payment_status' => 'pending'
             ]);
 
-            Log::info('🔍 Plagiarism order created with correct Google Drive data', [
-                'order_number' => $order->order_number,
-                'storage_type' => $order->storage_type,
-                'is_google_drive' => $order->is_google_drive,
-                'google_drive_file_id' => $order->google_drive_file_id,
-                'google_drive_view_url' => $order->google_drive_view_url
-            ]);
-
             // Send WhatsApp notification
             try {
                 $storageInfo = $uploadResult['is_google_drive']
-                    ? "☁️ Dokumen tersimpan aman di Google Drive cloud storage"
+                    ? "☁️ Dokumen tersimpan aman di Google Drive"
                     : "📁 Dokumen tersimpan di server";
 
                 $message = "✅ *PESANAN DITERIMA*\n\n" .
@@ -371,18 +332,16 @@ class DocumentUploadController extends Controller
 
                 $this->sendWhatsAppMessage($order->customer_phone, $message);
             } catch (\Exception $e) {
-                Log::error('Failed to send WhatsApp notification: ' . $e->getMessage());
+                Log::error('WhatsApp notification failed', ['error' => $e->getMessage()]);
             }
 
             return redirect()->route('payment.show', $order->order_number);
         } catch (\Exception $e) {
-            Log::error('Plagiarism submit error: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Plagiarism submit error', ['error' => $e->getMessage()]);
             return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
         }
     }
 
-    // Keep existing WhatsApp methods
     public function sendWablasMessage($phone, $message)
     {
         $token = config('services.wablas.token');
@@ -406,14 +365,9 @@ class DocumentUploadController extends Controller
                 'message' => $message
             ]);
 
-            Log::info('WABLAS Response:', [
-                'status' => $response->status(),
-                'body' => $response->body()
-            ]);
-
             return $response->successful();
         } catch (\Exception $e) {
-            Log::error("WABLAS API Error: " . $e->getMessage());
+            Log::error('WABLAS API Error', ['error' => $e->getMessage()]);
             return false;
         }
     }
@@ -435,14 +389,9 @@ class DocumentUploadController extends Controller
                 'countryCode' => '62',
             ]);
 
-            Log::info('FONNTE Response:', [
-                'status' => $response->status(),
-                'body' => $response->body()
-            ]);
-
             return $response->successful();
         } catch (\Exception $e) {
-            Log::error("FONNTE API Error: " . $e->getMessage());
+            Log::error('FONNTE API Error', ['error' => $e->getMessage()]);
             return false;
         }
     }
