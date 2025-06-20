@@ -4,203 +4,132 @@ namespace App\Services;
 
 use Google\Client;
 use Google\Service\Drive;
-use Google\Service\Drive\DriveFile;
-use Google\Service\Drive\Permission;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 class GoogleDriveService
 {
     private $client;
-    private $service;
-    private $folderId;
+    private $drive;
 
     public function __construct()
     {
-        $this->client = new Client();
-
-        // Service Account authentication
-        $serviceAccountFile = storage_path('app/google-service-account.json');
-
-        if (!file_exists($serviceAccountFile)) {
-            throw new \Exception('Google service account file not found: ' . $serviceAccountFile);
-        }
-
-        $this->client->setAuthConfig($serviceAccountFile);
-        $this->client->setScopes([Drive::DRIVE]);
-
-        $this->service = new Drive($this->client);
-        $this->folderId = config('services.google_drive.folder_id', '1KQWlg9P99xPSoJ43RABMpm1mZPQN0MzF');
+        $this->initializeClient();
     }
 
-    /**
-     * Upload file ke Google Drive
-     */
-    public function uploadFile($file, $serviceType)
+    private function initializeClient()
     {
         try {
-            Log::info('=== GOOGLE DRIVE UPLOAD START ===', [
-                'service_type' => $serviceType,
-                'file_name' => $file->getClientOriginalName(),
-                'file_size' => $file->getSize()
-            ]);
+            $this->client = new Client();
+            $this->client->setApplicationName('Laravel Google Drive');
+            $this->client->setScopes([Drive::DRIVE_FILE]);
 
-            // ... existing code ...
+            // For Vercel deployment - use environment variables
+            $serviceAccountJson = env('GOOGLE_SERVICE_ACCOUNT_JSON');
 
-            $uploadedFile = $this->service->files->create($fileMetadata, [
-                'data' => $fileContent,
-                'mimeType' => $mimeType,
-                'uploadType' => 'multipart'
-            ]);
-
-            $fileId = $uploadedFile->getId();
-            $fileName = $uploadedFile->getName();
-
-            // TAMBAH LOG INI
-            Log::info('✅ Google Drive upload successful', [
-                'file_id' => $fileId,
-                'file_name' => $fileName,
-                'service_type' => $serviceType
-            ]);
-
-            // PASTIKAN RETURN YANG BENAR
-            $result = [
-                'success' => true,
-                'file_id' => $fileId,
-                'name' => $fileName,
-                'view_url' => "https://drive.google.com/file/d/{$fileId}/view",
-                'preview_url' => "https://drive.google.com/file/d/{$fileId}/preview",
-                'download_url' => "https://drive.google.com/uc?export=download&id={$fileId}",
-                'direct_link' => "https://drive.google.com/open?id={$fileId}",
-                'thumbnail_url' => null
-            ];
-
-            Log::info('Google Drive upload result:', $result);
-
-            return $result;
-        } catch (\Exception $e) {
-            Log::error('❌ Google Drive upload failed: ' . $e->getMessage());
-            return [
-                'success' => false,
-                'error' => $e->getMessage()
-            ];
-        }
-    }
-
-    /**
-     * Create folder if not exists
-     */
-    private function createFolder(string $folderName): string
-    {
-        try {
-            // Capitalize folder name
-            $folderName = ucfirst(strtolower($folderName));
-
-            // Check if folder exists
-            $query = "name='{$folderName}' and mimeType='application/vnd.google-apps.folder' and parents in '{$this->folderId}' and trashed=false";
-            $results = $this->service->files->listFiles([
-                'q' => $query,
-                'fields' => 'files(id,name)'
-            ]);
-
-            if (count($results->getFiles()) > 0) {
-                $existingFolder = $results->getFiles()[0];
-                Log::info('📁 Using existing folder', [
-                    'folder_name' => $folderName,
-                    'folder_id' => $existingFolder->getId()
-                ]);
-                return $existingFolder->getId();
+            if (!$serviceAccountJson) {
+                throw new \Exception("GOOGLE_SERVICE_ACCOUNT_JSON environment variable not found. Please set it in Vercel dashboard.");
             }
 
-            // Create new folder
-            $folderMetadata = new DriveFile([
-                'name' => $folderName,
-                'mimeType' => 'application/vnd.google-apps.folder',
-                'parents' => [$this->folderId]
-            ]);
+            // Decode base64 encoded JSON from environment
+            $decodedJson = base64_decode($serviceAccountJson);
+            $serviceAccountData = json_decode($decodedJson, true);
 
-            $folder = $this->service->files->create($folderMetadata, [
-                'fields' => 'id,name'
-            ]);
+            if (!$serviceAccountData) {
+                throw new \Exception("Invalid GOOGLE_SERVICE_ACCOUNT_JSON format. Please check the base64 encoding.");
+            }
 
-            Log::info('📁 Created new folder', [
-                'folder_name' => $folderName,
-                'folder_id' => $folder->id
-            ]);
+            $this->client->setAuthConfig($serviceAccountData);
+            $this->drive = new Drive($this->client);
 
-            return $folder->id;
+            Log::info('Google Drive service initialized successfully via environment variables');
         } catch (\Exception $e) {
-            Log::error('❌ Failed to create/find folder', [
-                'error' => $e->getMessage(),
-                'folder_name' => $folderName
-            ]);
-
-            // Fallback to main folder
-            return $this->folderId;
+            Log::error('Failed to initialize Google Drive service: ' . $e->getMessage());
+            throw $e;
         }
     }
 
-    /**
-     * Set file permissions untuk public access
-     */
-    private function setFilePermissions(string $fileId): void
+    public function uploadFile($filePath, $fileName, $mimeType = null)
     {
         try {
-            $permission = new Permission([
-                'type' => 'anyone',
-                'role' => 'reader'
+            if (!file_exists($filePath)) {
+                throw new \Exception("File not found: {$filePath}");
+            }
+
+            $fileMetadata = new \Google\Service\Drive\DriveFile([
+                'name' => $fileName,
+                'parents' => [env('GOOGLE_DRIVE_FOLDER_ID', '1KQWlg9P99xPSoJ43RABMpm1mZPQN0MzF')]
             ]);
 
-            $this->service->permissions->create($fileId, $permission);
+            $content = file_get_contents($filePath);
+            $mimeType = $mimeType ?: mime_content_type($filePath);
 
-            Log::info('🔓 File permissions set successfully', ['file_id' => $fileId]);
+            $file = $this->drive->files->create($fileMetadata, [
+                'data' => $content,
+                'mimeType' => $mimeType,
+                'uploadType' => 'multipart',
+                'fields' => 'id'
+            ]);
+
+            // Set file permissions to be viewable by anyone with the link
+            $permission = new \Google\Service\Drive\Permission([
+                'role' => 'reader',
+                'type' => 'anyone'
+            ]);
+
+            $this->drive->permissions->create($file->id, $permission);
+
+            Log::info("File uploaded to Google Drive successfully", [
+                'file_id' => $file->id,
+                'original_name' => $fileName
+            ]);
+
+            return $file->id;
         } catch (\Exception $e) {
-            Log::warning('⚠️ Failed to set file permissions', [
-                'file_id' => $fileId,
-                'error' => $e->getMessage()
+            Log::error('Failed to upload file to Google Drive: ' . $e->getMessage(), [
+                'file_path' => $filePath,
+                'file_name' => $fileName
             ]);
+            throw $e;
         }
     }
 
-    /**
-     * Test connection
-     */
-    public function testConnection(): bool
+    public function deleteFile($fileId)
     {
         try {
-            // Try to list files in main folder
-            $this->service->files->listFiles([
-                'q' => "parents in '{$this->folderId}'",
-                'pageSize' => 1,
-                'fields' => 'files(id,name)'
-            ]);
-
-            Log::info('✅ Google Drive connection test successful');
+            $this->drive->files->delete($fileId);
+            Log::info("File deleted from Google Drive", ['file_id' => $fileId]);
             return true;
         } catch (\Exception $e) {
-            Log::error('❌ Google Drive connection test failed', [
-                'error' => $e->getMessage()
+            Log::error('Failed to delete file from Google Drive: ' . $e->getMessage(), [
+                'file_id' => $fileId
             ]);
             return false;
         }
     }
 
-    /**
-     * Delete file from Google Drive
-     */
-    public function deleteFile(string $fileId): bool
+    public function getFileInfo($fileId)
     {
         try {
-            $this->service->files->delete($fileId);
-
-            Log::info('🗑️ File deleted successfully', ['file_id' => $fileId]);
-            return true;
-        } catch (\Exception $e) {
-            Log::error('❌ Failed to delete file from Google Drive', [
-                'file_id' => $fileId,
-                'error' => $e->getMessage()
+            return $this->drive->files->get($fileId, [
+                'fields' => 'id, name, mimeType, size, createdTime, modifiedTime'
             ]);
-            return false;
+        } catch (\Exception $e) {
+            Log::error('Failed to get file info from Google Drive: ' . $e->getMessage(), [
+                'file_id' => $fileId
+            ]);
+            throw $e;
         }
+    }
+
+    public function generateUrls($fileId)
+    {
+        return [
+            'view_url' => "https://drive.google.com/file/d/{$fileId}/view",
+            'preview_url' => "https://drive.google.com/file/d/{$fileId}/preview",
+            'download_url' => "https://drive.google.com/uc?export=download&id={$fileId}",
+            'direct_link' => "https://drive.google.com/open?id={$fileId}",
+            'thumbnail_url' => "https://drive.google.com/thumbnail?id={$fileId}&sz=s220"
+        ];
     }
 }
