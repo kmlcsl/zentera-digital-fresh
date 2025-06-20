@@ -6,6 +6,7 @@ use Google\Client;
 use Google\Service\Drive;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\UploadedFile;
 
 class GoogleDriveService
 {
@@ -49,22 +50,49 @@ class GoogleDriveService
         }
     }
 
-    public function uploadFile($filePath, $fileName, $mimeType = null)
+    public function uploadFile($file, $fileName = null, $mimeType = null)
     {
         try {
-            if (!file_exists($filePath)) {
-                throw new \Exception("File not found: {$filePath}");
+            // Handle different input types
+            if ($file instanceof UploadedFile) {
+                // Laravel UploadedFile object
+                $content = $file->get();
+                $fileName = $fileName ?: $file->getClientOriginalName();
+                $mimeType = $mimeType ?: $file->getMimeType();
+
+                Log::info('Processing UploadedFile', [
+                    'original_name' => $file->getClientOriginalName(),
+                    'size' => $file->getSize(),
+                    'mime_type' => $file->getMimeType()
+                ]);
+            } elseif (is_string($file) && file_exists($file)) {
+                // File path string
+                $content = file_get_contents($file);
+                $fileName = $fileName ?: basename($file);
+                $mimeType = $mimeType ?: mime_content_type($file);
+
+                Log::info('Processing file path', [
+                    'file_path' => $file,
+                    'file_name' => $fileName,
+                    'mime_type' => $mimeType
+                ]);
+            } else {
+                throw new \Exception("Invalid file input. Expected UploadedFile object or valid file path.");
             }
 
+            // Validate content
+            if (empty($content)) {
+                throw new \Exception("File content is empty or could not be read.");
+            }
+
+            // Create file metadata for Google Drive
             $fileMetadata = new \Google\Service\Drive\DriveFile([
                 'name' => $fileName,
                 'parents' => [env('GOOGLE_DRIVE_FOLDER_ID', '1KQWlg9P99xPSoJ43RABMpm1mZPQN0MzF')]
             ]);
 
-            $content = file_get_contents($filePath);
-            $mimeType = $mimeType ?: mime_content_type($filePath);
-
-            $file = $this->drive->files->create($fileMetadata, [
+            // Upload to Google Drive
+            $driveFile = $this->drive->files->create($fileMetadata, [
                 'data' => $content,
                 'mimeType' => $mimeType,
                 'uploadType' => 'multipart',
@@ -77,18 +105,22 @@ class GoogleDriveService
                 'type' => 'anyone'
             ]);
 
-            $this->drive->permissions->create($file->id, $permission);
+            $this->drive->permissions->create($driveFile->id, $permission);
 
             Log::info("File uploaded to Google Drive successfully", [
-                'file_id' => $file->id,
-                'original_name' => $fileName
+                'file_id' => $driveFile->id,
+                'original_name' => $fileName,
+                'mime_type' => $mimeType,
+                'size' => strlen($content)
             ]);
 
-            return $file->id;
+            return $driveFile->id;
         } catch (\Exception $e) {
             Log::error('Failed to upload file to Google Drive: ' . $e->getMessage(), [
-                'file_path' => $filePath,
-                'file_name' => $fileName
+                'file_type' => get_class($file),
+                'file_name' => $fileName ?? 'unknown',
+                'error_line' => $e->getLine(),
+                'error_file' => $e->getFile()
             ]);
             throw $e;
         }
