@@ -49,7 +49,7 @@
                         <div class="bg-blue-50 rounded-lg p-3 md:p-4">
                             <i class="fas fa-clock text-blue-600 mb-2 text-sm md:text-base"></i>
                             <h4 class="font-semibold text-gray-800 text-xs md:text-sm">Proses Cepat</h4>
-                            <p class="text-xs text-gray-600">1 hari kerja</p>
+                            <p class="text-xs text-gray-600">5-10 menit</p>
                         </div>
                         <div class="bg-green-50 rounded-lg p-3 md:p-4">
                             <i class="fas fa-file-pdf text-green-600 mb-2 text-sm md:text-base"></i>
@@ -148,21 +148,22 @@
                             </h4>
                             <ul class="text-xs md:text-sm text-gray-600 space-y-1 md:space-y-2">
                                 <li>✓ Harga: <strong>{{ $product->formatted_price }}</strong> per dokumen</li>
-                                <li>✓ <strong class="text-green-700">Pembayaran: Transfer SETELAH hasil selesai
-                                        dikerjakan</strong></li>
-                                <li>✓ Waktu pengerjaan: 1-2 hari kerja (maksimal 48 jam)</li>
+                                <li>✓ <strong class="text-green-700">Pembayaran: Transfer di awal setelah uploud dokumen
+                                        <em>(upload bukti transfer diperlukan)</em></strong></li>
+                                <li>✓ Waktu pengerjaan: 5-10 menit (maksimal 20 menit)</li>
                                 <li>✓ Laporan dalam format PDF detail dan lengkap</li>
                                 <li>✓ Menunjukkan persentase similarity dan sumber referensi</li>
                                 <li>✓ Hasil akan dikirim via WhatsApp setelah selesai</li>
-                                <li>📋 <em class="text-blue-600">Alur: Upload → Proses → Kirim Hasil → Bayar → Selesai</em>
+                                <li>📋 <em class="text-blue-600">Alur: Upload Dokumen → Bukti Transfer → Proses → Kirim
+                                        Hasil → Selesai</em>
                                 </li>
                             </ul>
 
                             <div class="mt-4 p-3 bg-blue-50 border-l-4 border-blue-400 rounded">
                                 <p class="text-xs md:text-sm text-blue-800">
                                     <i class="fas fa-lightbulb mr-1"></i>
-                                    <strong>Catatan:</strong> Anda tidak perlu bayar di muka. Pembayaran dilakukan setelah
-                                    menerima dan puas dengan hasil pekerjaan.
+                                    <strong>Catatan:</strong> Cukup uploud dokumen dan bukti transfer. Kami mulai proses
+                                    setelah verifikasi, dan kirim hasil langsung ke WhatsApp Anda.
                                 </p>
                             </div>
                         </div>
