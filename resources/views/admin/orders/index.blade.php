@@ -209,17 +209,32 @@
                                         @endif
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
-                                        @if ($order->payment_proof)
+                                        @if ($order->payment_proof || $order->payment_proof_google_drive_file_id)
                                             <div class="flex space-x-2">
-                                                <a href="{{ Storage::url($order->payment_proof) }}" target="_blank"
-                                                    class="text-green-600 hover:text-green-800 text-sm">
-                                                    <i class="fas fa-image mr-1"></i>Lihat
-                                                </a>
-                                                <button
-                                                    onclick="previewFile('{{ Storage::url($order->payment_proof) }}', 'payment')"
-                                                    class="text-blue-600 hover:text-blue-800 text-sm">
-                                                    <i class="fas fa-search-plus mr-1"></i>Zoom
-                                                </button>
+                                                @if ($order->payment_proof_is_google_drive && $order->payment_proof_google_drive_file_id)
+                                                    <!-- GOOGLE DRIVE PAYMENT PROOF -->
+                                                    <a href="{{ $order->payment_proof_google_drive_view_url }}"
+                                                        target="_blank"
+                                                        class="text-green-600 hover:text-green-800 text-sm">
+                                                        <i class="fab fa-google-drive mr-1"></i>Drive
+                                                    </a>
+                                                    <button
+                                                        onclick="previewFile('{{ $order->payment_proof_google_drive_view_url }}', 'payment', true, '{{ $order->payment_proof_google_drive_file_id }}')"
+                                                        class="text-blue-600 hover:text-blue-800 text-sm">
+                                                        <i class="fas fa-search-plus mr-1"></i>Zoom
+                                                    </button>
+                                                @else
+                                                    <!-- LOCAL PAYMENT PROOF -->
+                                                    <a href="{{ Storage::url($order->payment_proof) }}" target="_blank"
+                                                        class="text-green-600 hover:text-green-800 text-sm">
+                                                        <i class="fas fa-image mr-1"></i>Lihat
+                                                    </a>
+                                                    <button
+                                                        onclick="previewFile('{{ Storage::url($order->payment_proof) }}', 'payment', false)"
+                                                        class="text-blue-600 hover:text-blue-800 text-sm">
+                                                        <i class="fas fa-search-plus mr-1"></i>Zoom
+                                                    </button>
+                                                @endif
                                             </div>
                                         @else
                                             <span class="text-gray-400 text-sm">Belum upload</span>
@@ -408,41 +423,41 @@
                     </div>
 
                     ${order.notes ? `
-                                    <div>
-                                        <h4 class="font-semibold text-gray-800 mb-2">Catatan</h4>
-                                        <div class="bg-gray-50 p-3 rounded-md text-sm">
-                                            ${order.notes}
-                                        </div>
-                                    </div>
-                                ` : ''}
+                                                <div>
+                                                    <h4 class="font-semibold text-gray-800 mb-2">Catatan</h4>
+                                                    <div class="bg-gray-50 p-3 rounded-md text-sm">
+                                                        ${order.notes}
+                                                    </div>
+                                                </div>
+                                            ` : ''}
 
                     <div class="grid grid-cols-2 gap-4">
                         <div class="text-center">
                             <h4 class="font-semibold text-gray-800 mb-2">Dokumen</h4>
                             ${order.document_path ? `
-                                            <div class="space-y-2">
-                                                <a href="${order.document_path}" target="_blank"
-                                                   class="bg-blue-100 text-blue-600 px-4 py-2 rounded-md hover:bg-blue-200 inline-block">
-                                                    <i class="${order.is_google_drive ? 'fab fa-google-drive' : 'fas fa-download'} mr-2"></i>
-                                                    ${order.is_google_drive ? 'Buka di Google Drive' : 'Download File'}
-                                                </a>
-                                                <br>
-                                                <button onclick="previewFile('${order.document_path}', 'document', ${order.is_google_drive}, '${order.google_drive_file_id || ''}')"
-                                                        class="bg-green-100 text-green-600 px-4 py-2 rounded-md hover:bg-green-200">
-                                                    <i class="fas fa-eye mr-2"></i>Preview
-                                                </button>
-                                            </div>
-                                        ` : '<span class="text-gray-400">Tidak ada file</span>'}
+                                                        <div class="space-y-2">
+                                                            <a href="${order.document_path}" target="_blank"
+                                                               class="bg-blue-100 text-blue-600 px-4 py-2 rounded-md hover:bg-blue-200 inline-block">
+                                                                <i class="${order.is_google_drive ? 'fab fa-google-drive' : 'fas fa-download'} mr-2"></i>
+                                                                ${order.is_google_drive ? 'Buka di Google Drive' : 'Download File'}
+                                                            </a>
+                                                            <br>
+                                                            <button onclick="previewFile('${order.document_path}', 'document', ${order.is_google_drive}, '${order.google_drive_file_id || ''}')"
+                                                                    class="bg-green-100 text-green-600 px-4 py-2 rounded-md hover:bg-green-200">
+                                                                <i class="fas fa-eye mr-2"></i>Preview
+                                                            </button>
+                                                        </div>
+                                                    ` : '<span class="text-gray-400">Tidak ada file</span>'}
                         </div>
 
                         <div class="text-center">
                             <h4 class="font-semibold text-gray-800 mb-2">Bukti Transfer</h4>
                             ${order.payment_proof ? `
-                                            <a href="${order.payment_proof}" target="_blank"
-                                               class="bg-green-100 text-green-600 px-4 py-2 rounded-md hover:bg-green-200 inline-block">
-                                                <i class="fas fa-image mr-2"></i>Lihat Bukti
-                                            </a>
-                                        ` : '<span class="text-gray-400">Belum upload</span>'}
+                                                        <a href="${order.payment_proof}" target="_blank"
+                                                           class="bg-green-100 text-green-600 px-4 py-2 rounded-md hover:bg-green-200 inline-block">
+                                                            <i class="fas fa-image mr-2"></i>Lihat Bukti
+                                                        </a>
+                                                    ` : '<span class="text-gray-400">Belum upload</span>'}
                         </div>
                     </div>
                 </div>
@@ -536,25 +551,33 @@
         function previewFile(fileUrl, type, isGoogleDrive = false, googleDriveFileId = null) {
             const content = document.getElementById('filePreviewContent');
 
-            // GOOGLE DRIVE FILES
+            // GOOGLE DRIVE FILES (Documents or Payment Proofs)
             if (isGoogleDrive && googleDriveFileId) {
                 const googlePreviewUrl = `https://drive.google.com/file/d/${googleDriveFileId}/preview`;
                 const googleViewUrl = `https://drive.google.com/file/d/${googleDriveFileId}/view`;
                 const googleDownloadUrl = `https://drive.google.com/uc?export=download&id=${googleDriveFileId}`;
+
+                // Determine file type display
+                let fileTypeInfo = '';
+                if (type === 'payment') {
+                    fileTypeInfo = '<p class="text-sm text-gray-600">Bukti Transfer disimpan di Google Drive</p>';
+                } else {
+                    fileTypeInfo = '<p class="text-sm text-gray-600">Dokumen disimpan di Google Drive</p>';
+                }
 
                 content.innerHTML = `
         <div class="text-center">
             <div class="mb-4">
                 <div class="flex items-center justify-center mb-2">
                     <i class="fab fa-google-drive text-2xl text-blue-600 mr-2"></i>
-                    <p class="text-sm text-gray-600">File disimpan di Google Drive</p>
+                    ${fileTypeInfo}
                 </div>
 
                 <div class="border rounded-md bg-white p-2 shadow-sm">
                     <iframe src="${googlePreviewUrl}"
                             width="100%" height="450px"
                             class="border-0 rounded"
-                            onerror="showGoogleDriveError('${googleViewUrl}', '${googleDownloadUrl}');">
+                            onerror="showGoogleDriveError('${googleViewUrl}', '${googleDownloadUrl}', '${type}');">
                     </iframe>
                 </div>
             </div>
@@ -572,16 +595,20 @@
 
             <div class="mt-3 text-xs text-gray-500">
                 <p>📁 File ID: ${googleDriveFileId}</p>
-                <p>☁️ Disimpan aman di Google Drive</p>
+                <p>☁️ Disimpan aman di Google Drive (${type === 'payment' ? 'Payment Proofs' : 'Documents'})</p>
             </div>
         </div>
     `;
             }
-            // PAYMENT IMAGES (Local storage)
+            // PAYMENT IMAGES (Local or Google Drive images)
             else if (type === 'payment') {
                 content.innerHTML = `
         <div class="text-center">
             <div class="mb-4">
+                <div class="flex items-center justify-center mb-2">
+                    <i class="fas fa-receipt text-2xl text-green-600 mr-2"></i>
+                    <p class="text-sm text-gray-600">Bukti Transfer</p>
+                </div>
                 <img src="${fileUrl}" alt="Bukti Pembayaran"
                      class="max-w-full max-h-96 mx-auto rounded-md shadow-lg"
                      onerror="showImageError('${fileUrl}');">
@@ -624,9 +651,11 @@
             document.getElementById('filePreviewModal').classList.remove('hidden');
         }
 
-        // Error handlers
-        function showGoogleDriveError(viewUrl, downloadUrl) {
+        // Updated Google Drive error handler
+        function showGoogleDriveError(viewUrl, downloadUrl, fileType = 'document') {
             const content = document.getElementById('filePreviewContent');
+            const typeDisplay = fileType === 'payment' ? 'Bukti Transfer' : 'Dokumen';
+
             content.innerHTML = `
     <div class="text-center py-8">
         <i class="fab fa-google-drive text-6xl text-blue-400 mb-4"></i>
@@ -635,7 +664,7 @@
         <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 max-w-md mx-auto">
             <p class="text-blue-800 text-sm">
                 <i class="fas fa-info-circle mr-2"></i>
-                File tersimpan aman di Google Drive dan dapat diakses kapan saja
+                ${typeDisplay} tersimpan aman di Google Drive dan dapat diakses kapan saja
             </p>
         </div>
         <div class="space-x-2">

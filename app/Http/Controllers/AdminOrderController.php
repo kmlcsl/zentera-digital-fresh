@@ -310,10 +310,16 @@ class AdminOrderController extends Controller
                 }
             }
 
-            // Handle payment proof (selalu local storage)
+            // UPDATED: Handle payment proof (Google Drive or local storage)
             $paymentProof = null;
-            if ($order->payment_proof) {
-                $paymentProof = Storage::url($order->payment_proof);
+            if ($order->payment_proof || $order->payment_proof_google_drive_file_id) {
+                if ($order->payment_proof_is_google_drive && $order->payment_proof_google_drive_view_url) {
+                    // Google Drive payment proof
+                    $paymentProof = $order->payment_proof_google_drive_view_url;
+                } else if ($order->payment_proof) {
+                    // Local storage payment proof
+                    $paymentProof = Storage::url($order->payment_proof);
+                }
             }
 
             return response()->json([
@@ -337,15 +343,27 @@ class AdminOrderController extends Controller
 
                     // Document paths
                     'document_path' => $documentPath,
+
+                    // UPDATED: Payment proof paths dengan Google Drive support
                     'payment_proof' => $paymentProof,
 
-                    // Google Drive specific fields
+                    // Google Drive specific fields (documents)
                     'google_drive_file_id' => $order->google_drive_file_id,
                     'google_drive_view_url' => $order->google_drive_view_url,
                     'google_drive_preview_url' => $order->google_drive_preview_url,
                     'google_drive_download_url' => $order->google_drive_download_url,
                     'google_drive_direct_link' => $order->google_drive_direct_link,
-                    'google_drive_thumbnail_url' => $order->google_drive_thumbnail_url
+                    'google_drive_thumbnail_url' => $order->google_drive_thumbnail_url,
+
+                    // UPDATED: Payment proof Google Drive specific fields
+                    'payment_proof_google_drive_file_id' => $order->payment_proof_google_drive_file_id,
+                    'payment_proof_google_drive_view_url' => $order->payment_proof_google_drive_view_url,
+                    'payment_proof_google_drive_preview_url' => $order->payment_proof_google_drive_preview_url,
+                    'payment_proof_google_drive_download_url' => $order->payment_proof_google_drive_download_url,
+                    'payment_proof_google_drive_direct_link' => $order->payment_proof_google_drive_direct_link,
+                    'payment_proof_google_drive_thumbnail_url' => $order->payment_proof_google_drive_thumbnail_url,
+                    'payment_proof_is_google_drive' => $order->payment_proof_is_google_drive ? true : false,
+                    'payment_proof_storage_type' => $order->payment_proof_storage_type ?? 'local'
                 ]
             ]);
         } catch (\Exception $e) {

@@ -276,23 +276,32 @@
         // File upload preview
         document.getElementById('document').addEventListener('change', function(e) {
             const file = e.target.files[0];
+            const uploadArea = document.querySelector('.border-dashed');
+
             if (file) {
                 const fileSize = (file.size / 1024 / 1024).toFixed(2);
-                console.log(`File selected: ${file.name} (${fileSize} MB)`);
 
-                // Show file info
-                const uploadArea = document.querySelector('.border-dashed');
-                uploadArea.classList.add('border-red-400', 'bg-red-50');
-                uploadArea.classList.remove('border-gray-300');
+                // SUCCESS STATE (hijau)
+                uploadArea.classList.remove('border-gray-300', 'border-red-400', 'bg-red-50');
+                uploadArea.classList.add('border-green-400', 'bg-green-50');
 
-                // Add file name display
+                // Update file info dengan warna hijau
                 const fileName = file.name;
                 const fileInfo = uploadArea.querySelector('.file-info') || document.createElement('p');
                 fileInfo.className = 'file-info text-sm text-green-600 font-medium mt-2';
-                fileInfo.innerHTML = `<i class="fas fa-check-circle mr-1"></i>File terpilih: ${fileName}`;
+                fileInfo.innerHTML =
+                    `<i class="fas fa-check-circle mr-1"></i>File terpilih: ${fileName} (${fileSize} MB)`;
+
                 if (!uploadArea.querySelector('.file-info')) {
                     uploadArea.appendChild(fileInfo);
                 }
+            } else {
+                // RESET STATE (default)
+                uploadArea.classList.remove('border-green-400', 'bg-green-50', 'border-red-400', 'bg-red-50');
+                uploadArea.classList.add('border-gray-300');
+
+                const fileInfo = uploadArea.querySelector('.file-info');
+                if (fileInfo) fileInfo.remove();
             }
         });
 

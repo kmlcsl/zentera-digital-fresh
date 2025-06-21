@@ -118,7 +118,8 @@ class GoogleDriveService
                 'mime_type' => $mimeType,
                 'size' => strlen($content),
                 'service_type' => $serviceType,
-                'parent_folder' => $parentFolderId
+                'parent_folder' => $parentFolderId,
+                'folder_name' => $this->getFolderNameForService($serviceType)
             ]);
 
             return $driveFile->id;
@@ -136,22 +137,30 @@ class GoogleDriveService
 
     /**
      * Get or create subfolder based on service type
+     * UPDATED: Added 'payment' folder support
      */
     private function getOrCreateSubfolder($serviceType)
     {
         try {
             $rootFolderId = env('GOOGLE_DRIVE_FOLDER_ID', '1KQWlg9P99xPSoJ43RABMpm1mZPQN0MzF');
 
-            // Map service types to folder names
+            // UPDATED: Map service types to folder names
             $folderMapping = [
                 'repair' => 'Repair',
                 'format' => 'Format',
                 'plagiarism' => 'Plagiarism',
                 'translation' => 'Translation',
-                'proofreading' => 'Proofreading'
+                'proofreading' => 'Proofreading',
+                'payment' => 'Payment Proofs'  // NEW: Folder for payment proofs
             ];
 
             $folderName = $folderMapping[$serviceType] ?? 'Others';
+
+            Log::info('Getting/creating subfolder', [
+                'service_type' => $serviceType,
+                'folder_name' => $folderName,
+                'root_folder_id' => $rootFolderId
+            ]);
 
             // Search for existing subfolder
             $query = "name='{$folderName}' and parents in '{$rootFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false";
@@ -199,6 +208,23 @@ class GoogleDriveService
             // Fallback to root folder if subfolder creation fails
             return env('GOOGLE_DRIVE_FOLDER_ID', '1KQWlg9P99xPSoJ43RABMpm1mZPQN0MzF');
         }
+    }
+
+    /**
+     * Helper method untuk debug folder mapping
+     */
+    private function getFolderNameForService($serviceType)
+    {
+        $folderMapping = [
+            'repair' => 'Repair',
+            'format' => 'Format',
+            'plagiarism' => 'Plagiarism',
+            'translation' => 'Translation',
+            'proofreading' => 'Proofreading',
+            'payment' => 'Payment Proofs'
+        ];
+
+        return $folderMapping[$serviceType] ?? 'Others';
     }
 
     public function deleteFile($fileId)

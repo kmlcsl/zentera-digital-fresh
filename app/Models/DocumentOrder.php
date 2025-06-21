@@ -17,6 +17,8 @@ class DocumentOrder extends Model
         'service_type',
         'service_name',
         'price',
+
+        // Document fields
         'document_path',
         'google_drive_file_id',
         'google_drive_view_url',
@@ -26,15 +28,27 @@ class DocumentOrder extends Model
         'google_drive_thumbnail_url',
         'is_google_drive',
         'storage_type',
+
+        // Payment proof fields
+        'payment_proof',
+        'payment_proof_google_drive_file_id',
+        'payment_proof_google_drive_view_url',
+        'payment_proof_google_drive_preview_url',
+        'payment_proof_google_drive_download_url',
+        'payment_proof_google_drive_direct_link',
+        'payment_proof_google_drive_thumbnail_url',
+        'payment_proof_is_google_drive',
+        'payment_proof_storage_type',
+
         'notes',
         'payment_status',
-        'payment_proof',
         'paid_at'
     ];
 
     protected $casts = [
         'paid_at' => 'datetime',
         'is_google_drive' => 'boolean',
+        'payment_proof_is_google_drive' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -77,7 +91,7 @@ class DocumentOrder extends Model
         return $icons[$this->service_type] ?? 'fas fa-file';
     }
 
-    // Helper method untuk mendapatkan URL file yang benar
+    // Helper method untuk mendapatkan URL file dokumen yang benar
     public function getFileUrlAttribute()
     {
         if ($this->is_google_drive && $this->google_drive_view_url) {
@@ -91,7 +105,7 @@ class DocumentOrder extends Model
         return null;
     }
 
-    // Helper method untuk mendapatkan download URL
+    // Helper method untuk mendapatkan download URL dokumen
     public function getDownloadUrlAttribute()
     {
         if ($this->is_google_drive && $this->google_drive_download_url) {
@@ -103,5 +117,39 @@ class DocumentOrder extends Model
         }
 
         return null;
+    }
+
+    // NEW: Helper method untuk mendapatkan URL payment proof yang benar
+    public function getPaymentProofUrlAttribute()
+    {
+        if ($this->payment_proof_is_google_drive && $this->payment_proof_google_drive_view_url) {
+            return $this->payment_proof_google_drive_view_url;
+        }
+
+        if ($this->payment_proof) {
+            return Storage::url($this->payment_proof);
+        }
+
+        return null;
+    }
+
+    // NEW: Helper method untuk mendapatkan download URL payment proof
+    public function getPaymentProofDownloadUrlAttribute()
+    {
+        if ($this->payment_proof_is_google_drive && $this->payment_proof_google_drive_download_url) {
+            return $this->payment_proof_google_drive_download_url;
+        }
+
+        if ($this->payment_proof) {
+            return Storage::url($this->payment_proof);
+        }
+
+        return null;
+    }
+
+    // NEW: Check if payment proof exists
+    public function hasPaymentProofAttribute()
+    {
+        return !empty($this->payment_proof) || !empty($this->payment_proof_google_drive_file_id);
     }
 }
